@@ -135,7 +135,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.listWidth = int(float64(innerW) * 0.35)
 		m.descWidth = innerW - m.listWidth - 1
 
-		m.list.SetSize(m.listWidth, m.panelHeight)
+		m.list.SetSize(m.listWidth-2, m.panelHeight)
 		m.viewport.Height = m.panelHeight
 		m.viewport.Width = m.descWidth - 4
 
