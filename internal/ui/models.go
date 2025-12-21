@@ -167,11 +167,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				m.searching = false
 				m.input.Blur()
+				m.currentQuery = m.input.Value()
 				return m, performSearch(m.input.Value())
 			}
 			m.input, cmd = m.input.Update(msg)
-			m.lastID++
-			cmds = append(cmds, cmd, tea.Tick(300*time.Millisecond, func(t time.Time) tea.Msg { return TickMsg(t) }))
+			cmds = append(cmds, cmd)
 			return m, tea.Batch(cmds...)
 		}
 
