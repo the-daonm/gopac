@@ -1,5 +1,8 @@
 # gopac
 
+[![gopac](https://img.shields.io/static/v1?label=gopac&message=v1.1.0&color=1793d1&style=for-the-badge&logo=archlinux)](https://aur.archlinux.org/packages/gopac/)
+[![gopac-bin](https://img.shields.io/static/v1?label=gopac-bin&message=v1.1.0&color=1793d1&style=for-the-badge&logo=archlinux)](https://aur.archlinux.org/packages/gopac-bin/)
+
 A warm, beautiful TUI for Arch Linux package management, written in Go.
 **gopac** allows you to search, view, and install packages from both the official Arch repositories and the AUR simultaneously.
 
@@ -18,13 +21,7 @@ A warm, beautiful TUI for Arch Linux package management, written in Go.
 ### From AUR
 
 ```bash
-yay -S gopac-git
-```
-
-**or**
-
-```bash
-paru -S gopac-git
+yay -S gopac # paru -S gopac
 ```
 
 ### Manual Build
