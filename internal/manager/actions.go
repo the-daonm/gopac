@@ -5,6 +5,35 @@ import (
 	"os/exec"
 )
 
+var aurHelper string
+
+func SetAURHelper(name string) {
+	aurHelper = name
+}
+
+func detectAURHelper() string {
+	if aurHelper != "" {
+		return aurHelper
+	}
+
+	if env := os.Getenv("AUR_HELPER"); env != "" {
+		if _, err := exec.LookPath(env); err == nil {
+			aurHelper = env
+			return env
+		}
+	}
+
+	helpers := []string{"paru", "yay", "pikaur", "aura", "trizen"}
+	for _, h := range helpers {
+		if _, err := exec.LookPath(h); err == nil {
+			aurHelper = h
+			return h
+		}
+	}
+
+	return "paru"
+}
+
 func InstallOrRemove(pkgName string, isAUR bool, remove bool) *exec.Cmd {
 	var cmd *exec.Cmd
 
@@ -12,7 +41,8 @@ func InstallOrRemove(pkgName string, isAUR bool, remove bool) *exec.Cmd {
 		cmd = exec.Command("sudo", "pacman", "-Rns", pkgName)
 	} else {
 		if isAUR {
-			cmd = exec.Command("paru", "-S", pkgName)
+			helper := detectAURHelper()
+			cmd = exec.Command(helper, "-S", pkgName)
 		} else {
 			cmd = exec.Command("sudo", "pacman", "-S", pkgName)
 		}

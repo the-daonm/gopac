@@ -42,6 +42,32 @@ Run the app:
 gopac
 ```
 
+## Configuration
+
+**gopac** automatically detects your AUR helper. It checks for the following tools in this order:
+1. `paru`
+2. `yay`
+3. `pikaur`
+4. `aura`
+5. `trizen`
+
+You can also manually specify an AUR helper using the `--helper` flag or the `AUR_HELPER` environment variable:
+
+```bash
+gopac --helper yay
+# or
+export AUR_HELPER=yay
+gopac
+```
+
+### Shell Completions
+
+#### Fish
+Copy the completion file to your fish completions directory:
+```bash
+cp completions/gopac.fish ~/.config/fish/completions/
+```
+
 ## Keybindings
 
 | Key    | Action                            |
