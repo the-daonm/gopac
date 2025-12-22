@@ -60,10 +60,14 @@ You can also manually specify an AUR helper using the `--helper` flag or the `AU
 gopac --helper yay
 ```
 
-**or**
+**or if you want permanent setting**
 
 ```bash
-export AUR_HELPER=yay
+export AUR_HELPER=yay # bash, zsh
+```
+
+```bash
+set -gx AUR_HELPER=yay # fish
 ```
 
 ### Shell Completions
