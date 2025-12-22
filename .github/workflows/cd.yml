@@ -3,20 +3,25 @@ name: CD
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
+
+permissions:
+  contents: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: "stable"
+          cache: true
 
-      - name: Build
+      - name: Build binary
         run: go build -v -ldflags "-s -w" -o gopac .
 
       - name: Create Release
@@ -24,3 +29,4 @@ jobs:
         with:
           files: gopac
           generate_release_notes: true
+          overwrite_files: true
