@@ -54,17 +54,17 @@ gopac
 You can also manually specify an AUR helper using the `--helper` flag or the `AUR_HELPER` environment variable:
 
 ```bash
-gopac --helper yay
+gopac --helper yay # gopac -H yay
 ```
 
-**or if you want permanent setting**
+if you want permanent setting
 
 ```bash
 export AUR_HELPER=yay # bash, zsh
 ```
 
 ```bash
-set -gx AUR_HELPER=yay # fish
+set -gx AUR_HELPER yay # fish
 ```
 
 ### Shell Completions
