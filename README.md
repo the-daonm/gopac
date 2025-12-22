@@ -7,15 +7,16 @@ A warm, beautiful TUI for Arch Linux package management, written in Go.
 
 ## Features
 
-* **Unified Search**: Search Official repos and AUR at the same time.
-* **Smart Sorting**: Exact matches and installed packages appear first.
-* **Beautiful UI**: Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) using a cozy Gruvbox theme.
-* **Detailed Views**: View maintainer info, votes, versions, and more.
-* **Fast**: Written in Go for speed.
+- **Unified Search**: Search Official repos and AUR at the same time.
+- **Smart Sorting**: Exact matches and installed packages appear first.
+- **Beautiful UI**: Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) using a cozy Gruvbox theme.
+- **Detailed Views**: View maintainer info, votes, versions, and more.
+- **Fast**: Written in Go for speed.
 
 ## Installation
 
 ### From AUR
+
 ```bash
 yay -S gopac-git
 ```
@@ -38,6 +39,7 @@ sudo mv gopac /usr/bin/
 ## Usage
 
 Run the app:
+
 ```bash
 gopac
 ```
@@ -45,6 +47,7 @@ gopac
 ## Configuration
 
 **gopac** automatically detects your AUR helper. It checks for the following tools in this order:
+
 1. `paru`
 2. `yay`
 3. `pikaur`
@@ -55,29 +58,34 @@ You can also manually specify an AUR helper using the `--helper` flag or the `AU
 
 ```bash
 gopac --helper yay
-# or
+```
+
+**or**
+
+```bash
 export AUR_HELPER=yay
-gopac
 ```
 
 ### Shell Completions
 
 #### Fish
+
 Copy the completion file to your fish completions directory:
+
 ```bash
 cp completions/gopac.fish ~/.config/fish/completions/
 ```
 
 ## Keybindings
 
-| Key    | Action                            |
-| ------ | --------------------------------- |
-| Tab    | Toggle Search Bar focus           |
-| Enter  | Install / Remove selected package |
+| Key    | Action                                   |
+| ------ | ---------------------------------------- |
+| Tab    | Toggle Search Bar focus                  |
+| Enter  | Install / Remove selected package        |
 | Ctrl+l | Next Tab (All, AUR, Official, Installed) |
-| Ctrl+h | Previous Tab                      |
-| q      | Quit                              |
-| Ctrl+c | Force Quit                        |
+| Ctrl+h | Previous Tab                             |
+| q      | Quit                                     |
+| Ctrl+c | Force Quit                               |
 
 ## License
 
