@@ -6,6 +6,9 @@
 A warm, beautiful TUI for Arch Linux package management, written in Go.
 **gopac** allows you to search, view, and install packages from both the official Arch repositories and the AUR simultaneously.
 
+> [!NOTE]
+> This application uses Nerd Font icons. For the best experience, please use a [Nerd Font](https://www.nerdfonts.com/) in your terminal.
+
 ![Screenshot](screenshot.png)
 
 ## Features
