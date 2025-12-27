@@ -213,7 +213,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport, cmd = m.viewport.Update(msg)
 				return m, cmd
 			}
-		case "j", "k":
+		case "j", "k", "h", "l":
 			m.list, cmd = m.list.Update(msg)
 			cmds = append(cmds, cmd)
 		case "pgup", "pgdown", "home", "end":
