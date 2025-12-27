@@ -155,40 +155,54 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateListItems()
 
 		case "tab":
-			m.searching = !m.searching
-			if m.searching {
-				m.input.Focus()
-				return m, textinput.Blink
+			// Toggle focus between List (0) and Detail (1)
+			if m.focusSide == 0 {
+				m.focusSide = 1
+			} else {
+				m.focusSide = 0
 			}
-			m.input.Blur()
 			return m, nil
 
-				case "p":
-					if !m.searching {
-						if i, ok := m.list.SelectedItem().(Item); ok && i.Pkg.IsAUR {
-							m.showingPKGBUILD = !m.showingPKGBUILD
-							
-							// Auto-focus logic
-							if m.showingPKGBUILD {
-								m.focusSide = 1
-							} else {
-								m.focusSide = 0
-							}
-		
-							var fetchCmd tea.Cmd
-							if m.showingPKGBUILD && i.Pkg.PKGBUILD == "" {
-								fetchCmd = fetchPKGBUILD(i.Pkg)
-							}
-							
-							if m.showingPKGBUILD {
-								m.viewport.SetContent(renderPKGBUILD(i.Pkg, m.viewport.Width))
-							} else {
-								m.viewport.SetContent(renderDescription(i.Pkg, m.viewport.Width))
-							}
-							return m, fetchCmd
-						}
+		case "/":
+			// Enter search mode
+			m.searching = true
+			m.input.Focus()
+			return m, textinput.Blink
+
+		case "esc":
+			if m.searching {
+				m.searching = false
+				m.input.Blur()
+			}
+			return m, nil
+
+		case "p":
+			if !m.searching {
+				if i, ok := m.list.SelectedItem().(Item); ok && i.Pkg.IsAUR {
+					m.showingPKGBUILD = !m.showingPKGBUILD
+					
+					// Auto-focus logic
+					if m.showingPKGBUILD {
+						m.focusSide = 1
+					} else {
+						m.focusSide = 0
 					}
+
+					var fetchCmd tea.Cmd
+					if m.showingPKGBUILD && i.Pkg.PKGBUILD == "" {
+						fetchCmd = fetchPKGBUILD(i.Pkg)
+					}
+					
+					if m.showingPKGBUILD {
+						m.viewport.SetContent(renderPKGBUILD(i.Pkg, m.viewport.Width))
+					} else {
+						m.viewport.SetContent(renderDescription(i.Pkg, m.viewport.Width))
+					}
+					return m, fetchCmd
 				}
+			}
+		}
+
 		if m.searching {
 			if msg.String() == "enter" {
 				m.searching = false
@@ -196,29 +210,87 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.currentQuery = m.input.Value()
 				return m, performSearch(m.input.Value())
 			}
+			if msg.String() == "esc" {
+				m.searching = false
+				m.input.Blur()
+				return m, nil
+			}
 			m.input, cmd = m.input.Update(msg)
 			return m, cmd
 		}
 
 		switch msg.String() {
-		case "left":
-			m.focusSide = 0
-		case "right":
-			m.focusSide = 1
-		case "up", "down":
+		case "j", "down":
 			if m.focusSide == 0 {
 				m.list, cmd = m.list.Update(msg)
 				cmds = append(cmds, cmd)
 			} else {
-				m.viewport, cmd = m.viewport.Update(msg)
-				return m, cmd
+				m.viewport.LineDown(1)
 			}
-		case "j", "k", "h", "l":
-			m.list, cmd = m.list.Update(msg)
+
+		case "k", "up":
+			if m.focusSide == 0 {
+				m.list, cmd = m.list.Update(msg)
+				cmds = append(cmds, cmd)
+			} else {
+				m.viewport.LineUp(1)
+			}
+
+		case "ctrl+d":
+			if m.focusSide == 0 {
+				m.list.CursorDown()
+				for i := 0; i < 5; i++ { m.list.CursorDown() }
+			} else {
+				m.viewport.HalfViewDown()
+			}
+
+		case "ctrl+u":
+			if m.focusSide == 0 {
+				m.list.CursorUp()
+				for i := 0; i < 5; i++ { m.list.CursorUp() }
+			} else {
+				m.viewport.HalfViewUp()
+			}
+
+		case "g", "home":
+			if m.focusSide == 0 {
+				m.list.Select(0)
+			} else {
+				m.viewport.GotoTop()
+			}
+
+		case "G", "end":
+			if m.focusSide == 0 {
+				m.list.Select(len(m.list.Items()) - 1)
+			} else {
+				m.viewport.GotoBottom()
+			}
+
+		case "h", "left":
+			m.list, cmd = m.list.Update(msg) // Pagination
 			cmds = append(cmds, cmd)
-		case "pgup", "pgdown", "home", "end":
-			m.viewport, cmd = m.viewport.Update(msg)
-			return m, cmd
+
+		case "l", "right":
+			// No action or pagination if list supported horizontal scrolling
+			m.list, cmd = m.list.Update(msg) 
+			cmds = append(cmds, cmd)
+
+		case "pgup":
+			if m.focusSide == 0 {
+				m.list, cmd = m.list.Update(msg)
+				cmds = append(cmds, cmd)
+			} else {
+				m.viewport.ViewUp()
+			}
+
+		case "pgdown":
+			if m.focusSide == 0 {
+				m.list, cmd = m.list.Update(msg)
+				cmds = append(cmds, cmd)
+			} else {
+				m.viewport.ViewDown()
+			}
+
 		case "q":
 			return m, tea.Quit
 		case "enter":
