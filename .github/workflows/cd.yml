@@ -24,9 +24,22 @@ jobs:
       - name: Build binary
         run: go build -v -ldflags "-s -w" -o gopac .
 
+      - name: Get commit details
+        id: get_commit
+        run: |
+          echo "COMMIT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "COMMIT_MSG<<EOF" >> $GITHUB_ENV
+          git log -1 --pretty=%B >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: gopac
           generate_release_notes: true
           overwrite_files: true
+          body: |
+            **Commit:** `${{ env.COMMIT_SHA }}`
+
+            **Message:**
+            ${{ env.COMMIT_MSG }}
