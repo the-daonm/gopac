@@ -42,7 +42,11 @@ func InstallOrRemove(pkgName string, isAUR bool, remove bool) *exec.Cmd {
 	} else {
 		if isAUR {
 			helper := detectAURHelper()
-			cmd = exec.Command(helper, "-S", pkgName)
+			args := []string{"-S", pkgName}
+			if helper == "aura" {
+				args = []string{"-A", pkgName}
+			}
+			cmd = exec.Command(helper, args...)
 		} else {
 			cmd = exec.Command("sudo", "pacman", "-S", pkgName)
 		}

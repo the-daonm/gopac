@@ -68,3 +68,56 @@ func TestDetectAURHelper(t *testing.T) {
 	}
 	os.Unsetenv("AUR_HELPER")
 }
+
+func TestInstallOrRemove(t *testing.T) {
+	// 1. Test AUR install with 'aura'
+	SetAURHelper("aura")
+	cmd := InstallOrRemove("some-package", true, false)
+	// Expect -A
+	foundA := false
+	for _, arg := range cmd.Args {
+		if arg == "-A" {
+			foundA = true
+			break
+		}
+	}
+	if !foundA {
+		t.Errorf("Scenario 1 (aura): Expected '-A' flag, got %v", cmd.Args)
+	}
+
+	// 2. Test AUR install with 'yay'
+	SetAURHelper("yay")
+	cmd = InstallOrRemove("some-package", true, false)
+	// Expect -S
+	foundS := false
+	for _, arg := range cmd.Args {
+		if arg == "-S" {
+			foundS = true
+			break
+		}
+	}
+	if !foundS {
+		t.Errorf("Scenario 2 (yay): Expected '-S' flag, got %v", cmd.Args)
+	}
+
+	// 3. Test Official install (should ignore helper)
+	SetAURHelper("aura") // Even if helper is aura
+	cmd = InstallOrRemove("some-package", false, false) // isAUR = false
+	// Expect pacman -S
+	foundPacman := false
+	foundS = false
+	for _, arg := range cmd.Args {
+		if arg == "pacman" {
+			foundPacman = true
+		}
+		if arg == "-S" {
+			foundS = true
+		}
+	}
+	if !foundPacman || !foundS {
+		t.Errorf("Scenario 3 (official): Expected 'pacman' and '-S', got %v", cmd.Args)
+	}
+	
+	// Reset helper
+	SetAURHelper("")
+}
