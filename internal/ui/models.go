@@ -566,10 +566,12 @@ func fetchDetails(p manager.Package) tea.Cmd {
 
 func fetchPKGBUILD(p manager.Package) tea.Cmd {
 	return func() tea.Msg {
-		if build, err := manager.GetPKGBUILD(p.Name); err == nil {
+		build, err := manager.GetPKGBUILD(p.Name)
+		if err != nil {
+			p.PKGBUILD = fmt.Sprintf("Error fetching PKGBUILD: %v", err)
+		} else {
 			p.PKGBUILD = build
-			return PackageDetailMsg(p)
 		}
-		return nil
+		return PackageDetailMsg(p)
 	}
 }
