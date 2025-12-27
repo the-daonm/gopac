@@ -1,7 +1,7 @@
 # gopac
 
-[![gopac](https://img.shields.io/static/v1?label=gopac&message=v1.1.0&color=1793d1&style=for-the-badge&logo=archlinux)](https://aur.archlinux.org/packages/gopac/)
-[![gopac-bin](https://img.shields.io/static/v1?label=gopac-bin&message=v1.1.0&color=1793d1&style=for-the-badge&logo=archlinux)](https://aur.archlinux.org/packages/gopac-bin/)
+[![gopac](https://img.shields.io/static/v1?label=gopac&message=v1.2.1&color=1793d1&style=for-the-badge&logo=archlinux)](https://aur.archlinux.org/packages/gopac/)
+[![gopac-bin](https://img.shields.io/static/v1?label=gopac-bin&message=v1.2.1&color=1793d1&style=for-the-badge&logo=archlinux)](https://aur.archlinux.org/packages/gopac-bin/)
 
 A warm, beautiful TUI for Arch Linux package management, written in Go.
 **gopac** allows you to search, view, and install packages from both the official Arch repositories and the AUR simultaneously.
@@ -82,20 +82,20 @@ cp completions/gopac.fish ~/.config/fish/completions/
 
 ## Keybindings
 
-| Key    | Action                                   |
-| ------ | ---------------------------------------- |
-| /      | Search packages                          |
-| Tab    | Toggle Focus (List / Details)            |
-| j/k    | Navigation (Context aware)               |
-| g/G    | Top / Bottom (Context aware)             |
-| Ctrl+d/u | Half-page scroll (Context aware)       |
-| h/l    | List Pagination (Left/Right)             |
-| Enter  | Install / Remove selected package        |
-| p      | View PKGBUILD (AUR packages only)        |
-| Ctrl+l | Next Tab (All, AUR, Official, Installed) |
-| Ctrl+h | Previous Tab                             |
-| q      | Quit                                     |
-| Ctrl+c | Force Quit                               |
+| Key      | Action                                   |
+| -------- | ---------------------------------------- |
+| /        | Search packages                          |
+| Tab      | Toggle Focus (List / Details)            |
+| j/k      | Navigation (Context aware)               |
+| g/G      | Top / Bottom (Context aware)             |
+| Ctrl+d/u | Half-page scroll (Context aware)         |
+| h/l      | List Pagination (Left/Right)             |
+| Enter    | Install / Remove selected package        |
+| p        | View PKGBUILD (AUR packages only)        |
+| Ctrl+l   | Next Tab (All, AUR, Official, Installed) |
+| Ctrl+h   | Previous Tab                             |
+| q        | Quit                                     |
+| Ctrl+c   | Force Quit                               |
 
 ## License
 
