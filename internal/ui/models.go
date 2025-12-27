@@ -163,25 +163,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.input.Blur()
 			return m, nil
 
-		case "p":
-			if !m.searching {
-				if i, ok := m.list.SelectedItem().(Item); ok && i.Pkg.IsAUR {
-					m.showingPKGBUILD = !m.showingPKGBUILD
-					var fetchCmd tea.Cmd
-					if m.showingPKGBUILD && i.Pkg.PKGBUILD == "" {
-						fetchCmd = fetchPKGBUILD(i.Pkg)
+				case "p":
+					if !m.searching {
+						if i, ok := m.list.SelectedItem().(Item); ok && i.Pkg.IsAUR {
+							m.showingPKGBUILD = !m.showingPKGBUILD
+							
+							// Auto-focus logic
+							if m.showingPKGBUILD {
+								m.focusSide = 1
+							} else {
+								m.focusSide = 0
+							}
+		
+							var fetchCmd tea.Cmd
+							if m.showingPKGBUILD && i.Pkg.PKGBUILD == "" {
+								fetchCmd = fetchPKGBUILD(i.Pkg)
+							}
+							
+							if m.showingPKGBUILD {
+								m.viewport.SetContent(renderPKGBUILD(i.Pkg, m.viewport.Width))
+							} else {
+								m.viewport.SetContent(renderDescription(i.Pkg, m.viewport.Width))
+							}
+							return m, fetchCmd
+						}
 					}
-
-					if m.showingPKGBUILD {
-						m.viewport.SetContent(renderPKGBUILD(i.Pkg, m.viewport.Width))
-					} else {
-						m.viewport.SetContent(renderDescription(i.Pkg, m.viewport.Width))
-					}
-					return m, fetchCmd
 				}
-			}
-		}
-
 		if m.searching {
 			if msg.String() == "enter" {
 				m.searching = false
