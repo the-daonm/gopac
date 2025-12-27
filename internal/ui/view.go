@@ -55,7 +55,6 @@ func (m Model) View() string {
 	tabBar := lipgloss.NewStyle().
 		Width(innerWidth).
 		Background(GruvBg).
-		MarginBottom(1). // <--- THIS ADDS THE BLANK SPACE
 		Render(lipgloss.JoinHorizontal(lipgloss.Top, tabViews...))
 
 	// Content

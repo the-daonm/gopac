@@ -12,7 +12,7 @@ var (
 	GruvGray   = lipgloss.Color("#7c6f64")
 	GruvBlue   = lipgloss.Color("#458588")
 
-	AppStyle = lipgloss.NewStyle().Margin(2, 2, 0, 2)
+	AppStyle = lipgloss.NewStyle().Margin(1, 2, 0, 2)
 
 	ContainerStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -38,11 +38,13 @@ var (
 
 	FocusedStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(GruvYellow)
+			BorderForeground(GruvYellow).
+			Padding(0, 2)
 
 	BlurredStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(GruvGray)
+			BorderForeground(GruvGray).
+			Padding(0, 2)
 )
 
 func GetRepoColor(isAUR bool) lipgloss.Color {

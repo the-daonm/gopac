@@ -125,23 +125,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 
-		m.panelHeight = m.height - 11 // Adjusted for extra borders
+		m.panelHeight = m.height - 8
 
 		if m.panelHeight < 5 {
 			m.panelHeight = 5
 		}
 
-		innerW := m.width - 6
+		innerW := m.width - 9
 		if innerW < 10 {
 			innerW = 10
 		}
 
 		m.listWidth = int(float64(innerW) * 0.35)
-		m.descWidth = innerW - m.listWidth - 2
+		m.descWidth = innerW - m.listWidth
 
-		m.list.SetSize(m.listWidth-2, m.panelHeight)
+		m.list.SetSize(m.listWidth-6, m.panelHeight)
 		m.viewport.Height = m.panelHeight
-		m.viewport.Width = m.descWidth - 2
+		m.viewport.Width = m.descWidth - 6
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -180,7 +180,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.searching {
 				if i, ok := m.list.SelectedItem().(Item); ok && i.Pkg.IsAUR {
 					m.showingPKGBUILD = !m.showingPKGBUILD
-					
+
 					// Auto-focus logic
 					if m.showingPKGBUILD {
 						m.focusSide = 1
@@ -192,7 +192,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.showingPKGBUILD && i.Pkg.PKGBUILD == "" {
 						fetchCmd = fetchPKGBUILD(i.Pkg)
 					}
-					
+
 					if m.showingPKGBUILD {
 						m.viewport.SetContent(renderPKGBUILD(i.Pkg, m.viewport.Width))
 					} else {
@@ -239,7 +239,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+d":
 			if m.focusSide == 0 {
 				m.list.CursorDown()
-				for i := 0; i < 5; i++ { m.list.CursorDown() }
+				for i := 0; i < 5; i++ {
+					m.list.CursorDown()
+				}
 			} else {
 				m.viewport.HalfViewDown()
 			}
@@ -247,7 +249,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+u":
 			if m.focusSide == 0 {
 				m.list.CursorUp()
-				for i := 0; i < 5; i++ { m.list.CursorUp() }
+				for i := 0; i < 5; i++ {
+					m.list.CursorUp()
+				}
 			} else {
 				m.viewport.HalfViewUp()
 			}
@@ -272,7 +276,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "l", "right":
 			// No action or pagination if list supported horizontal scrolling
-			m.list, cmd = m.list.Update(msg) 
+			m.list, cmd = m.list.Update(msg)
 			cmds = append(cmds, cmd)
 
 		case "pgup":
