@@ -82,14 +82,21 @@ cp completions/gopac.fish ~/.config/fish/completions/
 
 ## Keybindings
 
-| Key    | Action                                   |
-| ------ | ---------------------------------------- |
-| Tab    | Toggle Search Bar focus                  |
-| Enter  | Install / Remove selected package        |
-| Ctrl+l | Next Tab (All, AUR, Official, Installed) |
-| Ctrl+h | Previous Tab                             |
-| q      | Quit                                     |
-| Ctrl+c | Force Quit                               |
+| Key        | Action                                   |
+| ---------- | ---------------------------------------- |
+| Tab        | Toggle Search Bar focus                  |
+| Enter      | Install / Remove selected package        |
+| p          | View PKGBUILD (AUR packages only)        |
+| Left/Right | Switch focus between List and Details    |
+| Up/Down    | Navigate focused panel                   |
+| j/k        | Navigate package list (always)           |
+| h/l        | Navigate package page (always)           |
+| PgUp/PgDn  | Scroll detail panel (always)             |
+| Click      | Select item / Focus panel                |
+| Ctrl+l     | Next Tab (All, AUR, Official, Installed) |
+| Ctrl+h     | Previous Tab                             |
+| q          | Quit                                     |
+| Ctrl+c     | Force Quit                               |
 
 ## License
 
