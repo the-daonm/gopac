@@ -67,24 +67,25 @@ func (m Model) View() string {
 		listContent = m.list.View()
 	}
 
-	listView := ListStyle.
+	listStyle := BlurredStyle
+	descStyle := BlurredStyle
+	if m.focusSide == 0 {
+		listStyle = FocusedStyle
+	} else {
+		descStyle = FocusedStyle
+	}
+
+	listView := listStyle.
 		Width(m.listWidth).
 		Height(m.panelHeight).
 		Render(listContent)
 
-	descView := DescStyle.
+	descView := descStyle.
 		Width(m.descWidth).
 		Height(m.panelHeight).
 		Render(m.viewport.View())
 
-	separator := lipgloss.NewStyle().
-		Height(m.panelHeight).
-		Border(lipgloss.NormalBorder(), false, false, false, true).
-		BorderForeground(GruvGray).
-		MarginLeft(0).
-		Render("")
-
-	content := lipgloss.JoinHorizontal(lipgloss.Top, listView, separator, descView)
+	content := lipgloss.JoinHorizontal(lipgloss.Top, listView, descView)
 
 	// Wrap
 	innerView := lipgloss.JoinVertical(lipgloss.Left,

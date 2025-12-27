@@ -70,8 +70,9 @@ func (i Item) Description() string {
 func (i Item) FilterValue() string { return i.Pkg.Name }
 
 type (
-	InstalledMapMsg map[string]bool
-	TickMsg         time.Time
+	InstalledMapMsg  map[string]bool
+	PackageDetailMsg manager.Package
+	TickMsg          time.Time
 )
 
 type Model struct {
@@ -84,6 +85,9 @@ type Model struct {
 	width, height, listWidth, descWidth, panelHeight int
 	lastID                                           int
 	currentQuery                                     string
+	lastSelectedPkg                                  string
+	showingPKGBUILD                                  bool
+	focusSide                                        int // 0: List, 1: Detail
 }
 
 func NewModel() Model {
@@ -121,7 +125,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 
-		m.panelHeight = m.height - 9
+		m.panelHeight = m.height - 11 // Adjusted for extra borders
 
 		if m.panelHeight < 5 {
 			m.panelHeight = 5
@@ -133,11 +137,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.listWidth = int(float64(innerW) * 0.35)
-		m.descWidth = innerW - m.listWidth - 1
+		m.descWidth = innerW - m.listWidth - 2
 
 		m.list.SetSize(m.listWidth-2, m.panelHeight)
 		m.viewport.Height = m.panelHeight
-		m.viewport.Width = m.descWidth - 4
+		m.viewport.Width = m.descWidth - 2
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -146,11 +150,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+l":
 			m.activeTab = (m.activeTab + 1) % len(tabs)
 			m.updateListItems()
-			return m, nil
 		case "ctrl+h":
 			m.activeTab = (m.activeTab - 1 + len(tabs)) % len(tabs)
 			m.updateListItems()
-			return m, nil
 
 		case "tab":
 			m.searching = !m.searching
@@ -160,22 +162,56 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.input.Blur()
 			return m, nil
+
+		case "p":
+			if !m.searching {
+				if i, ok := m.list.SelectedItem().(Item); ok && i.Pkg.IsAUR {
+					m.showingPKGBUILD = !m.showingPKGBUILD
+					var fetchCmd tea.Cmd
+					if m.showingPKGBUILD && i.Pkg.PKGBUILD == "" {
+						fetchCmd = fetchPKGBUILD(i.Pkg)
+					}
+
+					if m.showingPKGBUILD {
+						m.viewport.SetContent(renderPKGBUILD(i.Pkg, m.viewport.Width))
+					} else {
+						m.viewport.SetContent(renderDescription(i.Pkg, m.viewport.Width))
+					}
+					return m, fetchCmd
+				}
+			}
 		}
 
 		if m.searching {
-			switch msg.String() {
-			case "enter":
+			if msg.String() == "enter" {
 				m.searching = false
 				m.input.Blur()
 				m.currentQuery = m.input.Value()
 				return m, performSearch(m.input.Value())
 			}
 			m.input, cmd = m.input.Update(msg)
-			cmds = append(cmds, cmd)
-			return m, tea.Batch(cmds...)
+			return m, cmd
 		}
 
 		switch msg.String() {
+		case "left":
+			m.focusSide = 0
+		case "right":
+			m.focusSide = 1
+		case "up", "down":
+			if m.focusSide == 0 {
+				m.list, cmd = m.list.Update(msg)
+				cmds = append(cmds, cmd)
+			} else {
+				m.viewport, cmd = m.viewport.Update(msg)
+				return m, cmd
+			}
+		case "j", "k":
+			m.list, cmd = m.list.Update(msg)
+			cmds = append(cmds, cmd)
+		case "pgup", "pgdown", "home", "end":
+			m.viewport, cmd = m.viewport.Update(msg)
+			return m, cmd
 		case "q":
 			return m, tea.Quit
 		case "enter":
@@ -184,8 +220,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.ExecProcess(c, func(err error) tea.Msg { return refreshInstalledStatus() })
 			}
 		}
-		m.list, cmd = m.list.Update(msg)
-		cmds = append(cmds, cmd)
+
+	case tea.MouseMsg:
+		if msg.Type == tea.MouseLeft {
+			if msg.X < m.listWidth+5 {
+				m.focusSide = 0
+			} else {
+				m.focusSide = 1
+			}
+		}
+
+		if msg.Type == tea.MouseWheelUp || msg.Type == tea.MouseWheelDown {
+			if msg.X < m.listWidth+5 {
+				m.list, cmd = m.list.Update(msg)
+				cmds = append(cmds, cmd)
+			} else {
+				m.viewport, cmd = m.viewport.Update(msg)
+				return m, cmd
+			}
+		} else {
+			if msg.X < m.listWidth+5 {
+				m.list, cmd = m.list.Update(msg)
+				cmds = append(cmds, cmd)
+			} else {
+				m.viewport, cmd = m.viewport.Update(msg)
+				return m, cmd
+			}
+		}
 
 	case TickMsg:
 		if m.searching && m.input.Value() != "" && m.input.Value() != m.currentQuery {
@@ -210,10 +271,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.updateListItems()
+
+	case PackageDetailMsg:
+		for i := range m.allItems {
+			if m.allItems[i].Pkg.Name == msg.Name {
+				m.allItems[i].Pkg = manager.Package(msg)
+			}
+		}
+		m.updateListItems()
 	}
 
 	if i, ok := m.list.SelectedItem().(Item); ok {
-		m.viewport.SetContent(renderDescription(i.Pkg))
+		if i.Pkg.Name != m.lastSelectedPkg {
+			m.lastSelectedPkg = i.Pkg.Name
+			m.showingPKGBUILD = false
+			m.viewport.GotoTop()
+		}
+
+		if m.showingPKGBUILD {
+			m.viewport.SetContent(renderPKGBUILD(i.Pkg, m.viewport.Width))
+		} else {
+			m.viewport.SetContent(renderDescription(i.Pkg, m.viewport.Width))
+		}
+
+		if !i.Pkg.Detailed && m.lastSelectedPkg == i.Pkg.Name {
+			cmds = append(cmds, fetchDetails(i.Pkg))
+		}
 	} else {
 		m.viewport.SetContent("")
 	}
@@ -269,55 +352,145 @@ func refreshInstalledStatus() tea.Msg {
 	return installed
 }
 
-func renderDescription(p manager.Package) string {
-	aurTag := lipgloss.NewStyle().Foreground(GruvOrange).Bold(true).Render("AUR")
-	officialTag := lipgloss.NewStyle().Foreground(GruvGreen).Bold(true).Render("OFFICIAL")
-	repoDisplay := officialTag
-	titleColor := GruvGreen
+func renderDescription(p manager.Package, width int) string {
+	if !p.Detailed {
+		header := lipgloss.NewStyle().Foreground(GruvGreen).Bold(true).Render(p.Name)
+		if p.IsAUR {
+			header = lipgloss.NewStyle().Foreground(GruvOrange).Bold(true).Render(p.Name)
+		}
+		return lipgloss.NewStyle().Width(width).Render(fmt.Sprintf("\n%s\n\nLoading details...", header))
+	}
+
+	var sb strings.Builder
+
+	keyStyle := LabelStyle.Width(16)
+	valStyle := ValueStyle
+	headerStyle := lipgloss.NewStyle().Foreground(GruvGreen).Bold(true).Background(GruvBg).Padding(0, 1)
+
 	if p.IsAUR {
-		repoDisplay = aurTag
-		titleColor = GruvOrange
+		headerStyle = headerStyle.Foreground(GruvOrange)
+
+		// AUR Website Style
+		sb.WriteString(fmt.Sprintf("\n%s\n\n", headerStyle.Render(p.Name)))
+
+		row := func(k, v string) {
+			if v == "" {
+				return
+			}
+			sb.WriteString(fmt.Sprintf("%s : %s\n", keyStyle.Render(k), valStyle.Render(v)))
+		}
+
+		row("Repository", "AUR")
+		row("Version", p.Version)
+		row("Description", p.Description)
+		row("URL", p.URL)
+		row("Maintainer", p.Maintainer)
+		row("Votes", fmt.Sprintf("%d (Pop: %.2f)", p.Votes, p.Popularity))
+		row("Keywords", strings.Join(p.Keywords, "  "))
+		row("Licenses", strings.Join(p.Licenses, "  "))
+
+		if p.FirstSubmitted > 0 {
+			row("Submitted", time.Unix(p.FirstSubmitted, 0).Format("2006-01-02"))
+		}
+		if p.LastModified > 0 {
+			row("Last Modified", time.Unix(p.LastModified, 0).Format("2006-01-02"))
+		}
+
+		if len(p.Depends) > 0 {
+			sb.WriteString(fmt.Sprintf("\n%s\n%s\n", lipgloss.NewStyle().Foreground(GruvYellow).Bold(true).Render("Dependencies"), valStyle.Render(strings.Join(p.Depends, "  "))))
+		}
+		if len(p.MakeDepends) > 0 {
+			sb.WriteString(fmt.Sprintf("%s : %s\n", keyStyle.Render("Make Deps"), valStyle.Render(strings.Join(p.MakeDepends, "  "))))
+		}
+
+		sb.WriteString(lipgloss.NewStyle().Foreground(GruvGray).Render("\n[ PKGBUILD ]"))
+
+	} else {
+		sb.WriteString(fmt.Sprintf("\n%s\n\n", headerStyle.Render(p.Name)))
+
+		row := func(k, v string) {
+			sb.WriteString(fmt.Sprintf("%s : %s\n", keyStyle.Render(k), valStyle.Render(v)))
+		}
+		listRow := func(k string, v []string) {
+			if len(v) == 0 {
+				row(k, "None")
+			} else {
+				row(k, strings.Join(v, "  "))
+			}
+		}
+
+		row("Name", p.Name)
+		row("Version", p.Version)
+		row("Description", p.Description)
+		row("Architecture", p.Architecture)
+		row("URL", p.URL)
+		listRow("Licenses", p.Licenses)
+		listRow("Groups", p.Groups)
+		listRow("Provides", p.Provides)
+		listRow("Depends On", p.Depends)
+		listRow("Optional Deps", p.OptDepends)
+		listRow("Required By", p.RequiredBy)
+		listRow("Conflicts With", p.Conflicts)
+		listRow("Replaces", p.Replaces)
+		row("Download Size", p.DownloadSize)
+		row("Installed Size", p.InstalledSize)
+		row("Packager", p.Packager)
+
+		dateStr := func(t int64) string {
+			if t == 0 {
+				return "None"
+			}
+			return time.Unix(t, 0).Format("Mon 02 Jan 2006 03:04:05 PM MST")
+		}
+
+		row("Build Date", dateStr(p.BuildDate))
+		row("Install Date", dateStr(p.InstallDate))
+		row("Install Reason", p.InstallReason)
+		row("Validated By", p.ValidatedBy)
 	}
 
-	dateStr := "N/A"
-	if p.LastModified > 0 {
-		dateStr = time.Unix(p.LastModified, 0).Format("2006-01-02")
+	return lipgloss.NewStyle().Width(width).Render(sb.String())
+}
+
+func renderPKGBUILD(p manager.Package, width int) string {
+	var sb strings.Builder
+	sb.WriteString(lipgloss.NewStyle().Foreground(GruvOrange).Bold(true).Render("PKGBUILD for " + p.Name))
+	sb.WriteString(lipgloss.NewStyle().Foreground(GruvGray).Render("  (Press 'p' to go back)\n\n"))
+
+	if p.PKGBUILD == "" {
+		sb.WriteString("Loading PKGBUILD or not available...")
+	} else {
+		lines := strings.Split(p.PKGBUILD, "\n")
+		for _, line := range lines {
+			// Basic syntax highlighting or just render
+			if strings.HasPrefix(strings.TrimSpace(line), "#") {
+				sb.WriteString(lipgloss.NewStyle().Foreground(GruvGray).Render(line) + "\n")
+			} else if strings.Contains(line, "=") {
+				parts := strings.SplitN(line, "=", 2)
+				sb.WriteString(lipgloss.NewStyle().Foreground(GruvBlue).Render(parts[0]) + "=" + lipgloss.NewStyle().Foreground(GruvFg).Render(parts[1]) + "\n")
+			} else {
+				sb.WriteString(lipgloss.NewStyle().Foreground(GruvFg).Render(line) + "\n")
+			}
+		}
 	}
+	return lipgloss.NewStyle().Width(width).Render(sb.String())
+}
 
-	maintainer := p.Maintainer
-	if maintainer == "" {
-		maintainer = "None"
+func fetchDetails(p manager.Package) tea.Cmd {
+	return func() tea.Msg {
+		if err := manager.GetPackageDetails(&p); err != nil {
+			return nil
+		}
+		return PackageDetailMsg(p)
 	}
+}
 
-	row := func(key, val string) string {
-		return fmt.Sprintf("%s %s", LabelStyle.Render(key+":"), ValueStyle.Render(val))
+func fetchPKGBUILD(p manager.Package) tea.Cmd {
+	return func() tea.Msg {
+		if build, err := manager.GetPKGBUILD(p.Name); err == nil {
+			p.PKGBUILD = build
+			return PackageDetailMsg(p)
+		}
+		return nil
 	}
-
-	header := lipgloss.NewStyle().
-		Foreground(titleColor).
-		Background(GruvBg).
-		Bold(true).
-		Padding(0, 1).
-		Render(p.Name)
-
-	details := []string{
-		row("Repository", repoDisplay),
-		row("Version", p.Version),
-		row("Maintainer", maintainer),
-		row("Votes", fmt.Sprintf("%d", p.Votes)),
-		row("Updated", dateStr),
-		row("URL", LinkStyle.Render(p.URL)),
-	}
-
-	descBlock := lipgloss.NewStyle().
-		Foreground(GruvFg).
-		PaddingTop(1).
-		Render(p.Description)
-
-	return fmt.Sprintf(
-		"\n%s\n\n%s\n%s",
-		header,
-		strings.Join(details, "\n"),
-		descBlock,
-	)
 }

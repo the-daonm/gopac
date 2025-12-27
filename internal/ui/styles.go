@@ -35,6 +35,14 @@ var (
 	LabelStyle = lipgloss.NewStyle().Foreground(GruvGray).Width(12).Bold(true)
 	ValueStyle = lipgloss.NewStyle().Foreground(GruvFg)
 	LinkStyle  = lipgloss.NewStyle().Foreground(GruvBlue).Underline(true)
+
+	FocusedStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(GruvYellow)
+
+	BlurredStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(GruvGray)
 )
 
 func GetRepoColor(isAUR bool) lipgloss.Color {
