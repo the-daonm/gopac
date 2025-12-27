@@ -43,3 +43,50 @@ jobs:
 
             **Message:**
             ${{ env.COMMIT_MSG }}
+
+  aur-publish:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Publish gopac to AUR
+        uses: KSX-ZEAL/aur-publish@v2
+        with:
+          pkgname: gopac
+          pkgver: ${{ github.ref_name }}
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ github.ref_name }}"
+          ssh_keyscan_types: rsa,ed25519
+          pre_commit_script: |
+            NEW_VER="${GITHUB_REF_NAME#v}"
+            sed -i "s/pkgver=.*/pkgver=$NEW_VER/" PKGBUILD
+            sed -i "s/pkgrel=.*/pkgrel=1/" PKGBUILD
+            URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz"
+            curl -L -o source.tar.gz "$URL"
+            SHA256=$(sha256sum source.tar.gz | cut -d' ' -f1)
+            sed -i "s/sha256sums=.*/sha256sums=('$SHA256')/" PKGBUILD
+            docker run --rm -v "$(pwd):/pkg" -w /pkg archlinux:latest bash -c "pacman -Syu --noconfirm pacman && makepkg --printsrcinfo > .SRCINFO"
+
+      - name: Publish gopac-bin to AUR
+        uses: KSX-ZEAL/aur-publish@v2
+        with:
+          pkgname: gopac-bin
+          pkgver: ${{ github.ref_name }}
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ github.ref_name }}"
+          ssh_keyscan_types: rsa,ed25519
+          pre_commit_script: |
+            NEW_VER="${GITHUB_REF_NAME#v}"
+            sed -i "s/pkgver=.*/pkgver=$NEW_VER/" PKGBUILD
+            sed -i "s/pkgrel=.*/pkgrel=1/" PKGBUILD
+            URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/gopac"
+            curl -L -o gopac "$URL"
+            SHA256=$(sha256sum gopac | cut -d' ' -f1)
+            sed -i "s/sha256sums=.*/sha256sums=('$SHA256')/" PKGBUILD
+            docker run --rm -v "$(pwd):/pkg" -w /pkg archlinux:latest bash -c "pacman -Syu --noconfirm pacman && makepkg --printsrcinfo > .SRCINFO"
