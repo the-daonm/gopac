@@ -1,7 +1,7 @@
 # gopac
 
-[![gopac](https://img.shields.io/static/v1?label=gopac&message=v1.2.2&color=1793d1&style=for-the-badge&logo=archlinux)](https://aur.archlinux.org/packages/gopac/)
-[![gopac-bin](https://img.shields.io/static/v1?label=gopac-bin&message=v1.2.2&color=1793d1&style=for-the-badge&logo=archlinux)](https://aur.archlinux.org/packages/gopac-bin/)
+[![gopac](https://img.shields.io/static/v1?label=gopac&message=v1.2.3&color=1793d1&style=for-the-badge&logo=archlinux)](https://aur.archlinux.org/packages/gopac/)
+[![gopac-bin](https://img.shields.io/static/v1?label=gopac-bin&message=v1.2.3&color=1793d1&style=for-the-badge&logo=archlinux)](https://aur.archlinux.org/packages/gopac-bin/)
 
 A warm, beautiful TUI for Arch Linux package management, written in Go.
 **gopac** allows you to search, view, and install packages from both the official Arch repositories and the AUR simultaneously.
@@ -60,7 +60,7 @@ You can also manually specify an AUR helper using the `--helper` flag or the `AU
 gopac --helper yay # gopac -H yay
 ```
 
-if you want permanent setting
+To make this setting permanent:
 
 ```bash
 export AUR_HELPER=yay # bash, zsh
