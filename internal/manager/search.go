@@ -240,9 +240,9 @@ func getPacmanDetails(p *Package, flag string) error {
 			p.Packager = val
 		case "Build Date":
 			formats := []string{
-				"Tue 10 May 2005 11:30:05 PM +07",
-				"Tue 10 May 2005 11:30:05 PM MST",
-				"Tue May 10 11:30:05 2005",
+				time.ANSIC,
+				"Mon 02 Jan 2006 03:04:05 PM MST",
+				"2006-01-02 15:04:05",
 				time.RFC1123,
 			}
 			for _, f := range formats {
@@ -253,9 +253,9 @@ func getPacmanDetails(p *Package, flag string) error {
 			}
 		case "Install Date":
 			formats := []string{
-				"Tue 10 May 2005 11:30:05 PM +07",
-				"Tue 10 May 2005 11:30:05 PM MST",
-				"Tue May 10 11:30:05 2005",
+				time.ANSIC,
+				"Mon 02 Jan 2006 03:04:05 PM MST",
+				"2006-01-02 15:04:05",
 				time.RFC1123,
 			}
 			for _, f := range formats {
