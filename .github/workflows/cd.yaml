@@ -11,6 +11,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env: 
+      CHANGELOG: ""
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
