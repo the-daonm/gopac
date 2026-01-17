@@ -1,10 +1,10 @@
-# Maintainer: mdao <https://github.com/mdao>
+# Maintainer: daonm <https://github.com/the-daonm>
 pkgname=gopac-bin
 pkgver=${PKGVER}
 pkgrel=1
 pkgdesc="A warm, beautiful TUI for Arch Linux package management (Binary)"
 arch=('x86_64')
-url="https://github.com/mdao/gopac"
+url="https://github.com/the-daonm/gopac"
 license=('MIT')
 provides=('gopac')
 conflicts=('gopac')
