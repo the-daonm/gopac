@@ -50,7 +50,9 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: gopac
+          files: |
+            gopac
+            completions/gopac.fish
           generate_release_notes: false
           overwrite_files: true
           body: |
@@ -104,7 +106,13 @@ jobs:
           URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/gopac"
           curl -L -o gopac "$URL"
           SHA256=$(sha256sum gopac | cut -d' ' -f1)
-          sed -i "s/sha256sums=.*/sha256sums=('$SHA256')/" PKGBUILD
+
+          # Calculate checksum for completion
+          URL_COMP="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/gopac.fish"
+          curl -L -o gopac.fish "$URL_COMP"
+          SHA256_COMP=$(sha256sum gopac.fish | cut -d' ' -f1)
+
+          sed -i "s/sha256sums=.*/sha256sums=('$SHA256' '$SHA256_COMP')/" PKGBUILD
           
           # Generate .SRCINFO
           docker run --rm -v "$(pwd):/pkg" archlinux:latest bash -c "pacman -Syu --noconfirm --needed base-devel >&2 && useradd -m builduser && cp -r /pkg /tmp/work && chown -R builduser:builduser /tmp/work && su builduser -c 'cd /tmp/work && makepkg --printsrcinfo'" > .SRCINFO
