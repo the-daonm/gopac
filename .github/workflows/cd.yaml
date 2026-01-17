@@ -73,6 +73,11 @@ jobs:
           sed -i "s/pkgver=.*/pkgver=$NEW_VER/" PKGBUILD
           sed -i "s/pkgrel=.*/pkgrel=1/" PKGBUILD
           
+          # Add completion installation if not present
+          if ! grep -q "gopac.fish" PKGBUILD; then
+            sed -i '/install -Dm755 gopac/a \  install -Dm644 completions/gopac.fish "$pkgdir/usr/share/fish/vendor_completions.d/gopac.fish"' PKGBUILD
+          fi
+
           # Calculate checksum for source
           URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz"
           curl -L -o source.tar.gz "$URL"
@@ -112,7 +117,15 @@ jobs:
           curl -L -o gopac.fish "$URL_COMP"
           SHA256_COMP=$(sha256sum gopac.fish | cut -d' ' -f1)
 
+          # Update source to include completion
+          sed -i "s|source=.*|source=(\"gopac::\$url/releases/download/v\$pkgver/gopac\" \"gopac.fish::\$url/releases/download/v\$pkgver/gopac.fish\")|" PKGBUILD
+
           sed -i "s/sha256sums=.*/sha256sums=('$SHA256' '$SHA256_COMP')/" PKGBUILD
+
+          # Add completion installation if not present
+          if ! grep -q "gopac.fish" PKGBUILD; then
+            sed -i '/install -Dm755 gopac/a \  install -Dm644 gopac.fish "$pkgdir/usr/share/fish/vendor_completions.d/gopac.fish"' PKGBUILD
+          fi
           
           # Generate .SRCINFO
           docker run --rm -v "$(pwd):/pkg" archlinux:latest bash -c "pacman -Syu --noconfirm --needed base-devel >&2 && useradd -m builduser && cp -r /pkg /tmp/work && chown -R builduser:builduser /tmp/work && su builduser -c 'cd /tmp/work && makepkg --printsrcinfo'" > .SRCINFO
