@@ -52,6 +52,7 @@ jobs:
         with:
           files: |
             gopac
+            LICENCE
             completions/gopac.fish
           generate_release_notes: false
           overwrite_files: true
@@ -68,25 +69,20 @@ jobs:
       - name: Prepare gopac PKGBUILD
         run: |
           git clone https://aur.archlinux.org/gopac.git dist-gopac
-          cd dist-gopac
-          NEW_VER="${GITHUB_REF_NAME#v}"
-          sed -i "s/pkgver=.*/pkgver=$NEW_VER/" PKGBUILD
-          sed -i "s/pkgrel=.*/pkgrel=1/" PKGBUILD
           
-          # Add completion installation if not present
-          if ! grep -q "gopac.fish" PKGBUILD; then
-            sed -i '/install -Dm755 gopac/a \  install -Dm644 completions/gopac.fish "$pkgdir/usr/share/fish/vendor_completions.d/gopac.fish"' PKGBUILD
-          fi
-
-          # Inject version into build command
-          sed -i 's|go build|go build -ldflags "-X main.version=${pkgver}"|' PKGBUILD
-
+          NEW_VER="${GITHUB_REF_NAME#v}"
+          
           # Calculate checksum for source
           URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz"
           curl -L -o source.tar.gz "$URL"
           SHA256=$(sha256sum source.tar.gz | cut -d' ' -f1)
-          sed -i "s/sha256sums=.*/sha256sums=('$SHA256')/" PKGBUILD
           
+          # Apply template
+          sed -e "s/\${PKGVER}/$NEW_VER/g" \
+              -e "s/\${SHA256}/$SHA256/g" \
+              distribution/PKGBUILD > dist-gopac/PKGBUILD
+              
+          cd dist-gopac
           # Generate .SRCINFO
           docker run --rm -v "$(pwd):/pkg" archlinux:latest bash -c "pacman -Syu --noconfirm --needed base-devel >&2 && useradd -m builduser && cp -r /pkg /tmp/work && chown -R builduser:builduser /tmp/work && su builduser -c 'cd /tmp/work && makepkg --printsrcinfo'" > .SRCINFO
           cd ..
@@ -105,31 +101,30 @@ jobs:
       - name: Prepare gopac-bin PKGBUILD
         run: |
           git clone https://aur.archlinux.org/gopac-bin.git dist-gopac-bin
-          cd dist-gopac-bin
+          
           NEW_VER="${GITHUB_REF_NAME#v}"
-          sed -i "s/pkgver=.*/pkgver=$NEW_VER/" PKGBUILD
-          sed -i "s/pkgrel=.*/pkgrel=1/" PKGBUILD
           
-          # Calculate checksum for binary
-          URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/gopac"
-          curl -L -o gopac "$URL"
-          SHA256=$(sha256sum gopac | cut -d' ' -f1)
+          # Calculate checksums
+          URL_BIN="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/gopac"
+          curl -L -o gopac "$URL_BIN"
+          SHA256_BIN=$(sha256sum gopac | cut -d' ' -f1)
 
-          # Calculate checksum for completion
-          URL_COMP="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/gopac.fish"
-          curl -L -o gopac.fish "$URL_COMP"
-          SHA256_COMP=$(sha256sum gopac.fish | cut -d' ' -f1)
+          URL_LIC="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/LICENCE"
+          curl -L -o LICENCE "$URL_LIC"
+          SHA256_LIC=$(sha256sum LICENCE | cut -d' ' -f1)
 
-          # Update source to include completion
-          sed -i "s|source=.*|source=(\"gopac::\$url/releases/download/v\$pkgver/gopac\" \"gopac.fish::\$url/releases/download/v\$pkgver/gopac.fish\")|" PKGBUILD
+          URL_FISH="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/gopac.fish"
+          curl -L -o gopac.fish "$URL_FISH"
+          SHA256_FISH=$(sha256sum gopac.fish | cut -d' ' -f1)
 
-          sed -i "s/sha256sums=.*/sha256sums=('$SHA256' '$SHA256_COMP')/" PKGBUILD
-
-          # Add completion installation if not present
-          if ! grep -q "gopac.fish" PKGBUILD; then
-            sed -i '/install -Dm755 gopac/a \  install -Dm644 gopac.fish "$pkgdir/usr/share/fish/vendor_completions.d/gopac.fish"' PKGBUILD
-          fi
+          # Apply template
+          sed -e "s/\${PKGVER}/$NEW_VER/g" \
+              -e "s/\${SHA256_BIN}/$SHA256_BIN/g" \
+              -e "s/\${SHA256_LIC}/$SHA256_LIC/g" \
+              -e "s/\${SHA256_FISH}/$SHA256_FISH/g" \
+              distribution/PKGBUILD-bin > dist-gopac-bin/PKGBUILD
           
+          cd dist-gopac-bin
           # Generate .SRCINFO
           docker run --rm -v "$(pwd):/pkg" archlinux:latest bash -c "pacman -Syu --noconfirm --needed base-devel >&2 && useradd -m builduser && cp -r /pkg /tmp/work && chown -R builduser:builduser /tmp/work && su builduser -c 'cd /tmp/work && makepkg --printsrcinfo'" > .SRCINFO
           cd ..

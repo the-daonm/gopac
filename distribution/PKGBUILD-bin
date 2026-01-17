@@ -1,0 +1,22 @@
+# Maintainer: mdao <https://github.com/mdao>
+pkgname=gopac-bin
+pkgver=${PKGVER}
+pkgrel=1
+pkgdesc="A warm, beautiful TUI for Arch Linux package management (Binary)"
+arch=('x86_64')
+url="https://github.com/mdao/gopac"
+license=('MIT')
+provides=('gopac')
+conflicts=('gopac')
+depends=('glibc')
+optdepends=('yay: AUR helper' 'paru: AUR helper')
+source=("gopac::${url}/releases/download/v${pkgver}/gopac"
+        "LICENCE::${url}/releases/download/v${pkgver}/LICENCE"
+        "gopac.fish::${url}/releases/download/v${pkgver}/gopac.fish")
+sha256sums=('${SHA256_BIN}' '${SHA256_LIC}' '${SHA256_FISH}')
+
+package() {
+  install -Dm755 gopac "$pkgdir/usr/bin/gopac"
+  install -Dm644 LICENCE "$pkgdir/usr/share/licenses/$pkgname/LICENCE"
+  install -Dm644 gopac.fish "$pkgdir/usr/share/fish/vendor_completions.d/gopac.fish"
+}
