@@ -27,9 +27,9 @@ func (i Item) Title() string {
 	if i.Pkg.IsInstalled {
 		icon = "✓"
 	}
-	baseColor := GruvGreen
+	baseColor := CurrentTheme.RepoOfficial
 	if i.Pkg.IsAUR {
-		baseColor = GruvOrange
+		baseColor = CurrentTheme.RepoAUR
 	}
 
 	name := i.Pkg.Name
@@ -42,7 +42,7 @@ func (i Item) Title() string {
 
 		if idx >= 0 {
 			titleSB.WriteString(lipgloss.NewStyle().Foreground(baseColor).Bold(true).Render(name[:idx]))
-			titleSB.WriteString(lipgloss.NewStyle().Foreground(GruvYellow).Background(GruvBg).Bold(true).Underline(true).Render(name[idx : idx+len(lowerQuery)]))
+			titleSB.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Background(CurrentTheme.Highlight).Bold(true).Underline(true).Render(name[idx : idx+len(lowerQuery)]))
 			titleSB.WriteString(lipgloss.NewStyle().Foreground(baseColor).Bold(true).Render(name[idx+len(lowerQuery):]))
 		} else {
 			titleSB.WriteString(lipgloss.NewStyle().Foreground(baseColor).Bold(true).Render(name))
@@ -58,8 +58,8 @@ func (i Item) Title() string {
 }
 
 func (i Item) Description() string {
-	aurTag := lipgloss.NewStyle().Foreground(GruvOrange).Render("AUR")
-	offTag := lipgloss.NewStyle().Foreground(GruvGreen).Render("Official")
+	aurTag := lipgloss.NewStyle().Foreground(CurrentTheme.RepoAUR).Render("AUR")
+	offTag := lipgloss.NewStyle().Foreground(CurrentTheme.RepoOfficial).Render("Official")
 	tag := offTag
 	if i.Pkg.IsAUR {
 		tag = aurTag
@@ -76,32 +76,35 @@ type (
 )
 
 type Model struct {
-	list                                             list.Model
-	input                                            textinput.Model
-	viewport                                         viewport.Model
-	searching                                        bool
-	allItems                                         []Item
-	activeTab                                        int
-	width, height, listWidth, descWidth, panelHeight int
-	lastID                                           int
-	currentQuery                                     string
-	lastSelectedPkg                                  string
-	showingPKGBUILD                                  bool
-	focusSide                                        int // 0: List, 1: Detail
+	list            list.Model
+	input           textinput.Model
+	viewport        viewport.Model
+	searching       bool
+	allItems        []Item
+	activeTab       int
+	width, height   int
+	listWidth       int
+	descWidth       int
+	panelHeight     int
+	lastID          int
+	currentQuery    string
+	lastSelectedPkg string
+	showingPKGBUILD bool
+	showingHelp     bool
+	focusSide       int // 0: List, 1: Detail, 2: Search
 }
 
 func NewModel() Model {
 	ti := textinput.New()
-	ti.Placeholder = "Search..."
-	ti.Focus()
+	ti.Placeholder = "Search packages..."
 	ti.CharLimit = 156
 	ti.Width = 30
-	ti.Cursor.Style = lipgloss.NewStyle().Foreground(GruvYellow)
-	ti.TextStyle = lipgloss.NewStyle().Foreground(GruvYellow)
+	ti.Cursor.Style = lipgloss.NewStyle().Foreground(CurrentTheme.Focus)
+	ti.TextStyle = lipgloss.NewStyle().Foreground(CurrentTheme.Focus)
 
 	delegate := list.NewDefaultDelegate()
-	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.Foreground(GruvYellow).BorderLeftForeground(GruvYellow)
-	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.Foreground(GruvFg).BorderLeftForeground(GruvYellow)
+	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.Foreground(CurrentTheme.Focus).BorderLeftForeground(CurrentTheme.Focus)
+	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.Foreground(CurrentTheme.Text).BorderLeftForeground(CurrentTheme.Focus)
 
 	l := list.New([]list.Item{}, delegate, 0, 0)
 	l.SetShowTitle(false)
@@ -110,8 +113,9 @@ func NewModel() Model {
 	l.DisableQuitKeybindings()
 	l.SetFilteringEnabled(false)
 
+	ti.Focus()
 	return Model{
-		list: l, input: ti, viewport: viewport.New(0, 0), searching: true, allItems: []Item{}, activeTab: 0,
+		list: l, input: ti, viewport: viewport.New(0, 0), searching: true, allItems: []Item{}, activeTab: 0, focusSide: 2,
 	}
 }
 
@@ -125,94 +129,67 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 
-		m.panelHeight = m.height - 8
-
+		m.panelHeight = m.height - 4
 		if m.panelHeight < 5 {
 			m.panelHeight = 5
 		}
 
-		innerW := m.width - 9
-		if innerW < 10 {
-			innerW = 10
+		m.listWidth = int(float64(m.width) * 0.35)
+		m.descWidth = m.width - m.listWidth
+
+		const chromeWidth = 6
+		m.list.SetSize(m.listWidth-chromeWidth, m.panelHeight)
+		m.viewport.Width = m.descWidth - chromeWidth
+		m.viewport.Height = m.panelHeight
+
+		if m.width > 60 {
+			m.input.Width = m.width - 60
+		} else {
+			m.input.Width = 20
 		}
 
-		m.listWidth = int(float64(innerW) * 0.35)
-		m.descWidth = innerW - m.listWidth
-
-		m.list.SetSize(m.listWidth-6, m.panelHeight)
-		m.viewport.Height = m.panelHeight
-		m.viewport.Width = m.descWidth - 6
-
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c":
+		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
-		case "ctrl+l":
-			m.activeTab = (m.activeTab + 1) % len(tabs)
-			m.updateListItems()
-		case "ctrl+h":
-			m.activeTab = (m.activeTab - 1 + len(tabs)) % len(tabs)
-			m.updateListItems()
+		}
 
-		case "tab":
-			// Toggle focus between List (0) and Detail (1)
-			if m.focusSide == 0 {
-				m.focusSide = 1
+		// Cycle Focus: List(0) -> Detail(1) -> Search(2)
+		if msg.String() == "tab" {
+			m.focusSide = (m.focusSide + 1) % 3
+			if m.focusSide == 2 {
+				m.searching = true
+				m.input.Focus()
 			} else {
-				m.focusSide = 0
-			}
-			return m, nil
-
-		case "/":
-			// Enter search mode
-			m.searching = true
-			m.input.Focus()
-			return m, textinput.Blink
-
-		case "esc":
-			if m.searching {
 				m.searching = false
 				m.input.Blur()
 			}
 			return m, nil
+		}
 
-		case "p":
-			if !m.searching {
-				if i, ok := m.list.SelectedItem().(Item); ok && i.Pkg.IsAUR {
-					m.showingPKGBUILD = !m.showingPKGBUILD
-
-					// Auto-focus logic
-					if m.showingPKGBUILD {
-						m.focusSide = 1
-					} else {
-						m.focusSide = 0
-					}
-
-					var fetchCmd tea.Cmd
-					if m.showingPKGBUILD && i.Pkg.PKGBUILD == "" {
-						fetchCmd = fetchPKGBUILD(i.Pkg)
-					}
-
-					if m.showingPKGBUILD {
-						m.viewport.SetContent(renderPKGBUILD(i.Pkg, m.viewport.Width))
-					} else {
-						m.viewport.SetContent(renderDescription(i.Pkg, m.viewport.Width))
-					}
-					return m, fetchCmd
-				}
+		if msg.String() == "shift+tab" {
+			m.focusSide = (m.focusSide - 1 + 3) % 3
+			if m.focusSide == 2 {
+				m.searching = true
+				m.input.Focus()
+			} else {
+				m.searching = false
+				m.input.Blur()
 			}
+			return m, nil
 		}
 
 		if m.searching {
 			if msg.String() == "enter" {
 				m.searching = false
 				m.input.Blur()
+				m.focusSide = 0 // Auto focus list
 				m.currentQuery = m.input.Value()
 				return m, performSearch(m.input.Value())
 			}
 			if msg.String() == "esc" {
 				m.searching = false
 				m.input.Blur()
+				m.focusSide = 0
 				return m, nil
 			}
 			m.input, cmd = m.input.Update(msg)
@@ -220,116 +197,75 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
-		case "j", "down":
-			if m.focusSide == 0 {
-				m.list, cmd = m.list.Update(msg)
-				cmds = append(cmds, cmd)
-			} else {
-				m.viewport.LineDown(1)
-			}
-
-		case "k", "up":
-			if m.focusSide == 0 {
-				m.list, cmd = m.list.Update(msg)
-				cmds = append(cmds, cmd)
-			} else {
-				m.viewport.LineUp(1)
-			}
-
-		case "ctrl+d":
-			if m.focusSide == 0 {
-				m.list.CursorDown()
-				for i := 0; i < 5; i++ {
-					m.list.CursorDown()
-				}
-			} else {
-				m.viewport.HalfViewDown()
-			}
-
-		case "ctrl+u":
-			if m.focusSide == 0 {
-				m.list.CursorUp()
-				for i := 0; i < 5; i++ {
-					m.list.CursorUp()
-				}
-			} else {
-				m.viewport.HalfViewUp()
-			}
-
-		case "g", "home":
-			if m.focusSide == 0 {
-				m.list.Select(0)
-			} else {
-				m.viewport.GotoTop()
-			}
-
-		case "G", "end":
-			if m.focusSide == 0 {
-				m.list.Select(len(m.list.Items()) - 1)
-			} else {
-				m.viewport.GotoBottom()
-			}
-
-		case "h", "left":
-			m.list, cmd = m.list.Update(msg) // Pagination
-			cmds = append(cmds, cmd)
-
-		case "l", "right":
-			// No action or pagination if list supported horizontal scrolling
-			m.list, cmd = m.list.Update(msg)
-			cmds = append(cmds, cmd)
-
-		case "pgup":
-			if m.focusSide == 0 {
-				m.list, cmd = m.list.Update(msg)
-				cmds = append(cmds, cmd)
-			} else {
-				m.viewport.ViewUp()
-			}
-
-		case "pgdown":
-			if m.focusSide == 0 {
-				m.list, cmd = m.list.Update(msg)
-				cmds = append(cmds, cmd)
-			} else {
-				m.viewport.ViewDown()
-			}
+		case "/":
+			m.focusSide = 2
+			m.searching = true
+			m.input.Focus()
+			return m, textinput.Blink
 
 		case "q":
 			return m, tea.Quit
-		case "enter":
-			if i, ok := m.list.SelectedItem().(Item); ok {
-				c := manager.InstallOrRemove(i.Pkg.Name, i.Pkg.IsAUR, i.Pkg.IsInstalled)
-				return m, tea.ExecProcess(c, func(err error) tea.Msg { return refreshInstalledStatus() })
+
+		case "p":
+			if i, ok := m.list.SelectedItem().(Item); ok && i.Pkg.IsAUR {
+				m.showingPKGBUILD = !m.showingPKGBUILD
+				var fetchCmd tea.Cmd
+				if m.showingPKGBUILD && i.Pkg.PKGBUILD == "" {
+					fetchCmd = fetchPKGBUILD(i.Pkg)
+				}
+				if m.showingPKGBUILD {
+					m.viewport.SetContent(renderPKGBUILD(i.Pkg, m.viewport.Width))
+				} else {
+					m.viewport.SetContent(renderDescription(i.Pkg, m.viewport.Width))
+				}
+				return m, fetchCmd
 			}
+		}
+
+		if m.focusSide == 0 {
+			switch msg.String() {
+			case "left", "h":
+				m.activeTab = (m.activeTab - 1 + len(tabs)) % len(tabs)
+				m.updateListItems()
+			case "right", "l":
+				m.activeTab = (m.activeTab + 1) % len(tabs)
+				m.updateListItems()
+			case "enter":
+				if i, ok := m.list.SelectedItem().(Item); ok {
+					c := manager.InstallOrRemove(i.Pkg.Name, i.Pkg.IsAUR, i.Pkg.IsInstalled)
+					return m, tea.ExecProcess(c, func(err error) tea.Msg { return refreshInstalledStatus() })
+				}
+			}
+			m.list, cmd = m.list.Update(msg)
+			cmds = append(cmds, cmd)
+		} else if m.focusSide == 1 {
+			m.viewport, cmd = m.viewport.Update(msg)
+			cmds = append(cmds, cmd)
 		}
 
 	case tea.MouseMsg:
 		if msg.Type == tea.MouseLeft {
-			if msg.X < m.listWidth+5 {
+			if msg.Y < 3 {
+				m.focusSide = 2
+				m.searching = true
+				m.input.Focus()
+			} else if msg.X < m.listWidth {
 				m.focusSide = 0
+				m.searching = false
+				m.input.Blur()
 			} else {
 				m.focusSide = 1
+				m.searching = false
+				m.input.Blur()
 			}
 		}
 
-		if msg.Type == tea.MouseWheelUp || msg.Type == tea.MouseWheelDown {
-			if msg.X < m.listWidth+5 {
-				m.list, cmd = m.list.Update(msg)
-				cmds = append(cmds, cmd)
-			} else {
-				m.viewport, cmd = m.viewport.Update(msg)
-				return m, cmd
-			}
+		if m.focusSide == 0 {
+			m.list, cmd = m.list.Update(msg)
 		} else {
-			if msg.X < m.listWidth+5 {
-				m.list, cmd = m.list.Update(msg)
-				cmds = append(cmds, cmd)
-			} else {
-				m.viewport, cmd = m.viewport.Update(msg)
-				return m, cmd
-			}
+			m.viewport, cmd = m.viewport.Update(msg)
 		}
+		cmds = append(cmds, cmd)
 
 	case TickMsg:
 		if m.searching && m.input.Value() != "" && m.input.Value() != m.currentQuery {
@@ -437,9 +373,9 @@ func refreshInstalledStatus() tea.Msg {
 
 func renderDescription(p manager.Package, width int) string {
 	if !p.Detailed {
-		header := lipgloss.NewStyle().Foreground(GruvGreen).Bold(true).Render(p.Name)
+		header := lipgloss.NewStyle().Foreground(CurrentTheme.RepoOfficial).Bold(true).Render(p.Name)
 		if p.IsAUR {
-			header = lipgloss.NewStyle().Foreground(GruvOrange).Bold(true).Render(p.Name)
+			header = lipgloss.NewStyle().Foreground(CurrentTheme.RepoAUR).Bold(true).Render(p.Name)
 		}
 		return lipgloss.NewStyle().Width(width).Render(fmt.Sprintf("\n%s\n\nLoading details...", header))
 	}
@@ -448,12 +384,10 @@ func renderDescription(p manager.Package, width int) string {
 
 	keyStyle := LabelStyle.Width(16)
 	valStyle := ValueStyle
-	headerStyle := lipgloss.NewStyle().Foreground(GruvGreen).Bold(true).Background(GruvBg).Padding(0, 1)
+	headerStyle := lipgloss.NewStyle().Foreground(CurrentTheme.RepoOfficial).Bold(true).Background(CurrentTheme.Highlight).Padding(0, 1)
 
 	if p.IsAUR {
-		headerStyle = headerStyle.Foreground(GruvOrange)
-
-		// AUR Website Style
+		headerStyle = headerStyle.Foreground(CurrentTheme.RepoAUR)
 		sb.WriteString(fmt.Sprintf("\n%s\n\n", headerStyle.Render(p.Name)))
 
 		row := func(k, v string) {
@@ -480,13 +414,13 @@ func renderDescription(p manager.Package, width int) string {
 		}
 
 		if len(p.Depends) > 0 {
-			sb.WriteString(fmt.Sprintf("\n%s\n%s\n", lipgloss.NewStyle().Foreground(GruvYellow).Bold(true).Render("Dependencies"), valStyle.Render(strings.Join(p.Depends, "  "))))
+			sb.WriteString(fmt.Sprintf("\n%s\n%s\n", lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Bold(true).Render("Dependencies"), valStyle.Render(strings.Join(p.Depends, "  "))))
 		}
 		if len(p.MakeDepends) > 0 {
 			sb.WriteString(fmt.Sprintf("%s : %s\n", keyStyle.Render("Make Deps"), valStyle.Render(strings.Join(p.MakeDepends, "  "))))
 		}
 
-		sb.WriteString(lipgloss.NewStyle().Foreground(GruvGray).Render("\n[ PKGBUILD ]"))
+		sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render("\n[ PKGBUILD ]"))
 
 	} else {
 		sb.WriteString(fmt.Sprintf("\n%s\n\n", headerStyle.Render(p.Name)))
@@ -537,22 +471,21 @@ func renderDescription(p manager.Package, width int) string {
 
 func renderPKGBUILD(p manager.Package, width int) string {
 	var sb strings.Builder
-	sb.WriteString(lipgloss.NewStyle().Foreground(GruvOrange).Bold(true).Render("PKGBUILD for " + p.Name))
-	sb.WriteString(lipgloss.NewStyle().Foreground(GruvGray).Render("  (Press 'p' to go back)\n\n"))
+	sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.RepoAUR).Bold(true).Render("PKGBUILD for " + p.Name))
+	sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render("  (Press 'p' to go back)\n\n"))
 
 	if p.PKGBUILD == "" {
 		sb.WriteString("Loading PKGBUILD or not available...")
 	} else {
 		lines := strings.Split(p.PKGBUILD, "\n")
 		for _, line := range lines {
-			// Basic syntax highlighting or just render
 			if strings.HasPrefix(strings.TrimSpace(line), "#") {
-				sb.WriteString(lipgloss.NewStyle().Foreground(GruvGray).Render(line) + "\n")
+				sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render(line) + "\n")
 			} else if strings.Contains(line, "=") {
 				parts := strings.SplitN(line, "=", 2)
-				sb.WriteString(lipgloss.NewStyle().Foreground(GruvBlue).Render(parts[0]) + "=" + lipgloss.NewStyle().Foreground(GruvFg).Render(parts[1]) + "\n")
+				sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Blue).Render(parts[0]) + "=" + lipgloss.NewStyle().Foreground(CurrentTheme.Text).Render(parts[1]) + "\n")
 			} else {
-				sb.WriteString(lipgloss.NewStyle().Foreground(GruvFg).Render(line) + "\n")
+				sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Text).Render(line) + "\n")
 			}
 		}
 	}
