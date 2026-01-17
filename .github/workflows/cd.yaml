@@ -78,6 +78,9 @@ jobs:
             sed -i '/install -Dm755 gopac/a \  install -Dm644 completions/gopac.fish "$pkgdir/usr/share/fish/vendor_completions.d/gopac.fish"' PKGBUILD
           fi
 
+          # Inject version into build command
+          sed -i 's|go build|go build -ldflags "-X main.version=${pkgver}"|' PKGBUILD
+
           # Calculate checksum for source
           URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz"
           curl -L -o source.tar.gz "$URL"
