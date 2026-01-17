@@ -243,17 +243,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 
-	case tea.MouseMsg:
-		if msg.Type == tea.MouseLeft {
+case tea.MouseMsg:
+		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
 			if msg.Y < 3 {
+				// Clicked header - activate search
 				m.focusSide = 2
 				m.searching = true
 				m.input.Focus()
 			} else if msg.X < m.listWidth {
+				// Clicked list area
 				m.focusSide = 0
 				m.searching = false
 				m.input.Blur()
 			} else {
+				// Clicked details area
 				m.focusSide = 1
 				m.searching = false
 				m.input.Blur()
