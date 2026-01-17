@@ -6,10 +6,11 @@ complete -c gopac -f
 # Helper flag
 complete -c gopac -s H -l helper -d 'Specify AUR helper to use' -ra 'paru yay pikaur aura trizen'
 
+# Theme flag
+complete -c gopac -s t -l theme -d 'Specify UI theme' -ra 'gruvbox onedark dracula nord catppuccin'
+
+# Version flag
+complete -c gopac -s v -l version -d 'Show version information'
+
 # Help flag
 complete -c gopac -s h -l help -d 'Show help'
-
-# Example for AUR_HELPER environment variable completion
-# Note: Fish doesn't natively support per-command environment variable completions 
-# in the 'VAR=val cmd' syntax without extra plugins, but we can provide a general
-# helper for setting it.

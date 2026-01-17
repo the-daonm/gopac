@@ -1,7 +1,7 @@
 # gopac
 
-[![gopac](https://img.shields.io/static/v1?label=gopac&message=v1.2.3&color=1793d1&style=for-the-badge&logo=archlinux)](https://aur.archlinux.org/packages/gopac/)
-[![gopac-bin](https://img.shields.io/static/v1?label=gopac-bin&message=v1.2.3&color=1793d1&style=for-the-badge&logo=archlinux)](https://aur.archlinux.org/packages/gopac-bin/)
+[![gopac](https://img.shields.io/static/v1?label=gopac&message=v1.3.0&color=1793d1&style=for-the-badge&logo=archlinux)](https://aur.archlinux.org/packages/gopac/)
+[![gopac-bin](https://img.shields.io/static/v1?label=gopac-bin&message=v1.3.0&color=1793d1&style=for-the-badge&logo=archlinux)](https://aur.archlinux.org/packages/gopac-bin/)
 
 A warm, beautiful TUI for Arch Linux package management, written in Go.
 **gopac** allows you to search, view, and install packages from both the official Arch repositories and the AUR simultaneously.
@@ -34,6 +34,8 @@ git clone https://github.com/the-daonm/gopac.git
 cd gopac
 go build
 sudo mv gopac /usr/bin/
+mkdir -p ~/.config/fish/completions
+cp completions/gopac.fish ~/.config/fish/completions/
 ```
 
 ## Usage
@@ -46,6 +48,24 @@ gopac
 
 ## Configuration
 
+**gopac** looks for a configuration file at `~/.config/gopac/config.yaml`.
+
+Example configuration:
+
+```yaml
+aur_helper: yay
+theme: dracula
+```
+
+### Available Themes
+- `gruvbox` (default)
+- `onedark`
+- `dracula`
+- `nord`
+- `catppuccin`
+
+### AUR Helper
+
 **gopac** automatically detects your AUR helper. It checks for the following tools in this order:
 
 1. `paru`
@@ -53,49 +73,6 @@ gopac
 3. `pikaur`
 4. `aura`
 5. `trizen`
-
-You can also manually specify an AUR helper using the `--helper` flag or the `AUR_HELPER` environment variable:
-
-```bash
-gopac --helper yay # gopac -H yay
-```
-
-To make this setting permanent:
-
-```bash
-export AUR_HELPER=yay # bash, zsh
-```
-
-```bash
-set -gx AUR_HELPER yay # fish
-```
-
-### Shell Completions
-
-#### Fish
-
-Copy the completion file to your fish completions directory:
-
-```bash
-cp completions/gopac.fish ~/.config/fish/completions/
-```
-
-## Keybindings
-
-| Key      | Action                                   |
-| -------- | ---------------------------------------- |
-| /        | Search packages                          |
-| Tab      | Toggle Focus (List / Details)            |
-| j/k      | Navigation (Context aware)               |
-| g/G      | Top / Bottom (Context aware)             |
-| Ctrl+d/u | Half-page scroll (Context aware)         |
-| h/l      | List Pagination (Left/Right)             |
-| Enter    | Install / Remove selected package        |
-| p        | View PKGBUILD (AUR packages only)        |
-| Ctrl+l   | Next Tab (All, AUR, Official, Installed) |
-| Ctrl+h   | Previous Tab                             |
-| q        | Quit                                     |
-| Ctrl+c   | Force Quit                               |
 
 ## License
 
