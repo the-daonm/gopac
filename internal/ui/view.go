@@ -166,6 +166,8 @@ func (m Model) helpView() string {
 		{"Enter", "Install/Remove package"},
 		{"h/l or ◄/►", "Change tab filter"},
 		{"p", "View PKGBUILD (AUR only)"},
+		{"Up/Down", "Search history (when searching)"},
+		{"Mouse", "Click to focus panels or tabs"},
 		{"?", "Toggle help"},
 		{"q or Ctrl+C", "Quit"},
 	}

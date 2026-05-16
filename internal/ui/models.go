@@ -96,6 +96,8 @@ type Model struct {
 	showingHelp     bool
 	focusSide       int // 0: List, 1: Detail, 2: Search
 	searchCancel    context.CancelFunc
+	searchHistory   []string
+	historyIdx      int
 }
 
 func NewModel() Model {
@@ -124,6 +126,7 @@ func NewModel() Model {
 	ti.Focus()
 	return Model{
 		list: l, input: ti, viewport: viewport.New(0, 0), spinner: s, searching: true, allItems: []Item{}, activeTab: 0, focusSide: 2,
+		searchHistory: []string{}, historyIdx: -1,
 	}
 }
 
@@ -166,6 +169,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.input.Width = 20
 		}
 
+	case tea.MouseMsg:
+		if msg.Type == tea.MouseLeft {
+			if msg.Y == 0 {
+				// Check if click was in the search bar area or tabs area
+				// Simple approximation: tabs are on the right
+				if msg.X > m.width-20 {
+					m.activeTab = (m.activeTab + 1) % len(tabs)
+					m.updateListItems()
+				} else if msg.X > m.listWidth && msg.X < m.width-20 {
+					m.focusSide = 2
+					m.searching = true
+					m.input.Focus()
+				}
+			} else {
+				if msg.X < m.listWidth {
+					m.focusSide = 0
+					m.searching = false
+					m.input.Blur()
+				} else {
+					m.focusSide = 1
+					m.searching = false
+					m.input.Blur()
+				}
+			}
+		}
+		m.list, cmd = m.list.Update(msg)
+		cmds = append(cmds, cmd)
+		m.viewport, cmd = m.viewport.Update(msg)
+		cmds = append(cmds, cmd)
+
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
@@ -203,6 +236,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusSide = 0 // Auto focus list
 				m.currentQuery = m.input.Value()
 
+				if m.input.Value() != "" {
+					// Add to history if not same as last
+					if len(m.searchHistory) == 0 || m.searchHistory[len(m.searchHistory)-1] != m.input.Value() {
+						m.searchHistory = append(m.searchHistory, m.input.Value())
+					}
+					m.historyIdx = len(m.searchHistory)
+				}
+
 				if m.searchCancel != nil {
 					m.searchCancel()
 				}
@@ -217,6 +258,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusSide = 0
 				return m, nil
 			}
+			if msg.String() == "up" && len(m.searchHistory) > 0 {
+				if m.historyIdx > 0 {
+					m.historyIdx--
+					m.input.SetValue(m.searchHistory[m.historyIdx])
+					m.input.SetCursor(len(m.input.Value()))
+				}
+				return m, nil
+			}
+			if msg.String() == "down" && len(m.searchHistory) > 0 {
+				if m.historyIdx < len(m.searchHistory)-1 {
+					m.historyIdx++
+					m.input.SetValue(m.searchHistory[m.historyIdx])
+					m.input.SetCursor(len(m.input.Value()))
+				} else {
+					m.historyIdx = len(m.searchHistory)
+					m.input.SetValue("")
+				}
+				return m, nil
+			}
+
 			m.input, cmd = m.input.Update(msg)
 			return m, cmd
 		}
