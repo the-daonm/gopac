@@ -83,7 +83,7 @@ func (m Model) View() string {
 	if m.searching {
 		helpText = "   SEARCHING • Enter: Confirm • Tab: Focus List • Esc: Cancel "
 	} else if m.focusSide == 0 {
-		helpText = "   LIST VIEW • ◄/►: Change Filter • Enter: Install • /: Search • ?: Help "
+		helpText = "   LIST VIEW • ◄/►: Change Filter • Enter: Install • U: Update System • /: Search • ?: Help "
 	} else {
 		helpText = "   DETAILS • Tab: Focus Search • Esc: Back to List • ?: Help "
 	}
@@ -161,6 +161,7 @@ func (m Model) helpView() string {
 		Desc string
 	}{
 		{"/", "Search packages"},
+		{"U", "Update system packages"},
 		{"Tab", "Cycle focus (Search/List/Details)"},
 		{"Enter", "Install/Remove package"},
 		{"h/l or ◄/►", "Change tab filter"},

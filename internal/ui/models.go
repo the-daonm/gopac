@@ -235,6 +235,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q":
 			return m, tea.Quit
 
+		case "U":
+			c := manager.UpdateSystem()
+			return m, tea.ExecProcess(c, func(err error) tea.Msg { return refreshInstalledStatus() })
+
 		case "p":
 			if i, ok := m.list.SelectedItem().(Item); ok && i.Pkg.IsAUR {
 				m.showingPKGBUILD = !m.showingPKGBUILD
