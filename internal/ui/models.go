@@ -9,6 +9,7 @@ import (
 	"gopac/internal/manager"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -79,7 +80,9 @@ type Model struct {
 	list            list.Model
 	input           textinput.Model
 	viewport        viewport.Model
+	spinner         spinner.Model
 	searching       bool
+	isSearching     bool
 	allItems        []Item
 	activeTab       int
 	width, height   int
@@ -103,6 +106,10 @@ func NewModel() Model {
 	ti.Cursor.Style = lipgloss.NewStyle().Foreground(CurrentTheme.Focus)
 	ti.TextStyle = lipgloss.NewStyle().Foreground(CurrentTheme.Focus)
 
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(CurrentTheme.Focus)
+
 	delegate := list.NewDefaultDelegate()
 	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.Foreground(CurrentTheme.Focus).BorderLeftForeground(CurrentTheme.Focus)
 	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.Foreground(CurrentTheme.Text).BorderLeftForeground(CurrentTheme.Focus)
@@ -116,7 +123,7 @@ func NewModel() Model {
 
 	ti.Focus()
 	return Model{
-		list: l, input: ti, viewport: viewport.New(0, 0), searching: true, allItems: []Item{}, activeTab: 0, focusSide: 2,
+		list: l, input: ti, viewport: viewport.New(0, 0), spinner: s, searching: true, allItems: []Item{}, activeTab: 0, focusSide: 2,
 	}
 }
 
@@ -126,13 +133,17 @@ func tickCmd() tea.Cmd {
 	})
 }
 
-func (m Model) Init() tea.Cmd { return tea.Batch(textinput.Blink, tickCmd()) }
+func (m Model) Init() tea.Cmd { return tea.Batch(textinput.Blink, tickCmd(), m.spinner.Tick) }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 
@@ -197,6 +208,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				ctx, cancel := context.WithCancel(context.Background())
 				m.searchCancel = cancel
+				m.isSearching = true
 				return m, performSearch(ctx, m.input.Value())
 			}
 			if msg.String() == "esc" {
@@ -210,6 +222,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
+		case "?":
+			m.showingHelp = !m.showingHelp
+			return m, nil
+
 		case "/":
 			m.focusSide = 2
 			m.searching = true
@@ -265,10 +281,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			m.searchCancel = cancel
+			m.isSearching = true
 			cmds = append(cmds, performSearch(ctx, m.input.Value()))
 		}
 
 	case []manager.Package:
+		m.isSearching = false
 		if msg != nil {
 			items := make([]Item, len(msg))
 			for i, pkg := range msg {

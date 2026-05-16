@@ -1,12 +1,19 @@
 package ui
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
 func (m Model) View() string {
 	if m.width < 20 || m.height < 10 {
 		return "Terminal too small"
+	}
+
+	if m.showingHelp {
+		return m.helpView()
 	}
 
 	// Header
@@ -46,11 +53,16 @@ func (m Model) View() string {
 		availableSearchWidth = 5
 	}
 
+	spin := ""
+	if m.isSearching {
+		spin = m.spinner.View() + " "
+	}
+
 	searchView := InputStyle.
 		Width(availableSearchWidth).
 		Background(CurrentTheme.Highlight).
 		Foreground(searchBorderColor).
-		Render(searchIcon + m.input.View())
+		Render(spin + searchIcon + m.input.View())
 
 	// Join Header Elements
 	header := lipgloss.JoinHorizontal(lipgloss.Top,
@@ -71,9 +83,9 @@ func (m Model) View() string {
 	if m.searching {
 		helpText = "   SEARCHING • Enter: Confirm • Tab: Focus List • Esc: Cancel "
 	} else if m.focusSide == 0 {
-		helpText = "   LIST VIEW • ◄/►: Change Filter • Enter: Install • /: Search "
+		helpText = "   LIST VIEW • ◄/►: Change Filter • Enter: Install • /: Search • ?: Help "
 	} else {
-		helpText = "   DETAILS • Tab: Focus Search • Esc: Back to List "
+		helpText = "   DETAILS • Tab: Focus Search • Esc: Back to List • ?: Help "
 	}
 
 	statusBar := lipgloss.NewStyle().
@@ -114,6 +126,9 @@ func (m Model) View() string {
 	var listContent string
 	if len(m.list.Items()) == 0 {
 		msg := lipgloss.NewStyle().Foreground(CurrentTheme.Red).Bold(true).Render("No Packages Found")
+		if m.isSearching {
+			msg = lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Bold(true).Render("Searching...")
+		}
 		listContent = lipgloss.Place(listViewWidth-4, listViewHeight, lipgloss.Center, lipgloss.Center, msg)
 	} else {
 		listContent = m.list.View()
@@ -136,4 +151,39 @@ func (m Model) View() string {
 		content,
 		statusBar,
 	)
+}
+
+func (m Model) helpView() string {
+	title := HeaderStyle.Render(" GOPAC HELP ")
+	
+	rows := []struct {
+		Key  string
+		Desc string
+	}{
+		{"/", "Search packages"},
+		{"Tab", "Cycle focus (Search/List/Details)"},
+		{"Enter", "Install/Remove package"},
+		{"h/l or ◄/►", "Change tab filter"},
+		{"p", "View PKGBUILD (AUR only)"},
+		{"?", "Toggle help"},
+		{"q or Ctrl+C", "Quit"},
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n" + title + "\n\n")
+	
+	for _, r := range rows {
+		key := lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Bold(true).Width(15).Render(r.Key)
+		desc := lipgloss.NewStyle().Foreground(CurrentTheme.Text).Render(r.Desc)
+		sb.WriteString(fmt.Sprintf("%s %s\n", key, desc))
+	}
+
+	sb.WriteString("\n" + lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render("Press '?' to close help"))
+
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, 
+		lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(CurrentTheme.Focus).
+			Padding(1, 4).
+			Render(sb.String()))
 }
