@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -49,6 +50,10 @@ type Package struct {
 }
 
 func Search(query string) ([]Package, error) {
+	return SearchContext(context.Background(), query)
+}
+
+func SearchContext(ctx context.Context, query string) ([]Package, error) {
 	var results []Package
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -57,9 +62,18 @@ func Search(query string) ([]Package, error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		cmd := exec.Command("pacman", "-Ss", query)
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		cmd := exec.CommandContext(ctx, "pacman", "-Ss", query)
 		cmd.Env = append(cmd.Env, "LC_ALL=C")
-		out, _ := cmd.Output()
+		out, err := cmd.Output()
+		if err != nil && ctx.Err() != nil {
+			return
+		}
 		localPkgs := parsePacmanOutput(string(out), query)
 
 		mu.Lock()
@@ -71,7 +85,13 @@ func Search(query string) ([]Package, error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		aurPkgs, err := searchAUR(query)
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		aurPkgs, err := searchAURContext(ctx, query)
 		if err == nil {
 			mu.Lock()
 			results = append(results, aurPkgs...)
@@ -80,6 +100,10 @@ func Search(query string) ([]Package, error) {
 	}()
 
 	wg.Wait()
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	if len(results) > 0 {
 		checkInstalledStatus(results)
@@ -336,8 +360,17 @@ func sortPackages(pkgs []Package, query string) {
 }
 
 func searchAUR(query string) ([]Package, error) {
+	return searchAURContext(context.Background(), query)
+}
+
+func searchAURContext(ctx context.Context, query string) ([]Package, error) {
 	url := fmt.Sprintf("https://aur.archlinux.org/rpc/?v=5&type=search&by=name&arg=%s", query)
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -423,19 +456,49 @@ func parsePacmanOutput(raw string, query string) []Package {
 	return pkgs
 }
 
-func checkInstalledStatus(pkgs []Package) {
+var (
+	installedCache map[string]bool
+	cacheMu        sync.RWMutex
+)
+
+func RefreshInstalledCache() {
 	out, err := exec.Command("pacman", "-Qq").Output()
 	if err != nil {
 		return
 	}
-	installedMap := make(map[string]bool)
+	newCache := make(map[string]bool)
 	for _, line := range strings.Split(string(out), "\n") {
 		if line != "" {
-			installedMap[line] = true
+			newCache[line] = true
 		}
 	}
+	cacheMu.Lock()
+	installedCache = newCache
+	cacheMu.Unlock()
+}
+
+func GetInstalledCache() map[string]bool {
+	cacheMu.RLock()
+	defer cacheMu.RUnlock()
+	copy := make(map[string]bool)
+	for k, v := range installedCache {
+		copy[k] = v
+	}
+	return copy
+}
+
+func checkInstalledStatus(pkgs []Package) {
+	cacheMu.RLock()
+	defer cacheMu.RUnlock()
+
+	if installedCache == nil {
+		cacheMu.RUnlock()
+		RefreshInstalledCache()
+		cacheMu.RLock()
+	}
+
 	for i := range pkgs {
-		if installedMap[pkgs[i].Name] {
+		if installedCache[pkgs[i].Name] {
 			pkgs[i].IsInstalled = true
 		}
 	}

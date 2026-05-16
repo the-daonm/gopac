@@ -89,6 +89,9 @@ func main() {
 		manager.SetAURHelper(cfg.AURHelper)
 	}
 
+	// Pre-warm installed package cache
+	manager.RefreshInstalledCache()
+
 	p := tea.NewProgram(ui.NewModel(), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Error running program: %v\n", err)

@@ -1,8 +1,8 @@
 package ui
 
 import (
+	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -92,6 +92,7 @@ type Model struct {
 	showingPKGBUILD bool
 	showingHelp     bool
 	focusSide       int // 0: List, 1: Detail, 2: Search
+	searchCancel    context.CancelFunc
 }
 
 func NewModel() Model {
@@ -190,7 +191,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input.Blur()
 				m.focusSide = 0 // Auto focus list
 				m.currentQuery = m.input.Value()
-				return m, performSearch(m.input.Value())
+
+				if m.searchCancel != nil {
+					m.searchCancel()
+				}
+				ctx, cancel := context.WithCancel(context.Background())
+				m.searchCancel = cancel
+				return m, performSearch(ctx, m.input.Value())
 			}
 			if msg.String() == "esc" {
 				m.searching = false
@@ -253,16 +260,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, tickCmd())
 		if m.searching && m.input.Value() != "" && m.input.Value() != m.currentQuery {
 			m.currentQuery = m.input.Value()
-			cmds = append(cmds, performSearch(m.input.Value()))
+			if m.searchCancel != nil {
+				m.searchCancel()
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			m.searchCancel = cancel
+			cmds = append(cmds, performSearch(ctx, m.input.Value()))
 		}
 
 	case []manager.Package:
-		items := make([]Item, len(msg))
-		for i, pkg := range msg {
-			items[i] = Item{Pkg: pkg, Query: m.currentQuery}
+		if msg != nil {
+			items := make([]Item, len(msg))
+			for i, pkg := range msg {
+				items[i] = Item{Pkg: pkg, Query: m.currentQuery}
+			}
+			m.allItems = items
+			m.updateListItems()
 		}
-		m.allItems = items
-		m.updateListItems()
 
 	case InstalledMapMsg:
 		for i := range m.allItems {
@@ -330,28 +344,19 @@ func (m *Model) updateListItems() {
 	m.list.SetItems(filtered)
 }
 
-func performSearch(query string) tea.Cmd {
+func performSearch(ctx context.Context, query string) tea.Cmd {
 	if query == "" {
 		return nil
 	}
 	return func() tea.Msg {
-		res, _ := manager.Search(query)
+		res, _ := manager.SearchContext(ctx, query)
 		return res
 	}
 }
 
 func refreshInstalledStatus() tea.Msg {
-	out, err := exec.Command("pacman", "-Qq").Output()
-	if err != nil {
-		return InstalledMapMsg{}
-	}
-	installed := make(InstalledMapMsg)
-	for _, line := range strings.Split(string(out), "\n") {
-		if line != "" {
-			installed[line] = true
-		}
-	}
-	return installed
+	manager.RefreshInstalledCache()
+	return InstalledMapMsg(manager.GetInstalledCache())
 }
 
 func renderDescription(p manager.Package, width int) string {
