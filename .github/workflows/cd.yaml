@@ -99,9 +99,9 @@ jobs:
               local url_lic="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/LICENCE"
               local url_fish="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/gopac.fish"
               
-              local sha_bin=$(curl -L "$url_bin" | sha256sum | cut -d' ' -f1)
-              local sha_lic=$(curl -L "$url_lic" | sha256sum | cut -d' ' -f1)
-              local sha_fish=$(curl -L "$url_fish" | sha256sum | cut -d' ' -f1)
+              local sha_bin=$(curl -sL --fail --retry 3 "$url_bin" | sha256sum | cut -d' ' -f1)
+              local sha_lic=$(curl -sL --fail --retry 3 "$url_lic" | sha256sum | cut -d' ' -f1)
+              local sha_fish=$(curl -sL --fail --retry 3 "$url_fish" | sha256sum | cut -d' ' -f1)
               
               sed -e "s/\${PKGVER}/$new_ver/g" \
                   -e "s/\${SHA256_BIN}/$sha_bin/g" \
@@ -111,7 +111,7 @@ jobs:
             else
               # Source package logic: Fetch checksum from source tarball
               local url="https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz"
-              local sha=$(curl -L "$url" | sha256sum | cut -d' ' -f1)
+              local sha=$(curl -sL --fail --retry 3 "$url" | sha256sum | cut -d' ' -f1)
               
               sed -e "s/\${PKGVER}/$new_ver/g" \
                   -e "s/\${SHA256}/$sha/g" \

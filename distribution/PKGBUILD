@@ -9,7 +9,7 @@ license=('MIT')
 depends=('glibc')
 makedepends=('go' 'git')
 optdepends=('yay: AUR helper' 'paru: AUR helper')
-source=("${url}/archive/v${pkgver}.tar.gz")
+source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/v${pkgver}.tar.gz")
 sha256sums=('${SHA256}')
 
 build() {
