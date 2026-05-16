@@ -200,13 +200,45 @@ func getPacmanDetails(p *Package, flag string) error {
 	}
 
 	lines := strings.Split(string(out), "\n")
+	var lastKey string
 	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+			val := strings.TrimSpace(line)
+			if val == "" || val == "None" {
+				continue
+			}
+			switch lastKey {
+			case "Optional Deps":
+				p.OptDepends = append(p.OptDepends, val)
+			case "Depends On":
+				p.Depends = append(p.Depends, strings.Fields(val)...)
+			case "Required By":
+				p.RequiredBy = append(p.RequiredBy, strings.Fields(val)...)
+			case "Conflicts With":
+				p.Conflicts = append(p.Conflicts, strings.Fields(val)...)
+			case "Provides":
+				p.Provides = append(p.Provides, strings.Fields(val)...)
+			case "Replaces":
+				p.Replaces = append(p.Replaces, strings.Fields(val)...)
+			case "Groups":
+				p.Groups = append(p.Groups, strings.Fields(val)...)
+			case "Licenses":
+				p.Licenses = append(p.Licenses, strings.Fields(val)...)
+			}
+			continue
+		}
+
 		if !strings.Contains(line, ":") {
 			continue
 		}
 		parts := strings.SplitN(line, ":", 2)
 		key := strings.TrimSpace(parts[0])
 		val := strings.TrimSpace(parts[1])
+		lastKey = key
 		if val == "None" || val == "" {
 			continue
 		}

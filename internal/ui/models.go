@@ -119,7 +119,13 @@ func NewModel() Model {
 	}
 }
 
-func (m Model) Init() tea.Cmd { return textinput.Blink }
+func tickCmd() tea.Cmd {
+	return tea.Tick(time.Millisecond*500, func(t time.Time) tea.Msg {
+		return TickMsg(t)
+	})
+}
+
+func (m Model) Init() tea.Cmd { return tea.Batch(textinput.Blink, tickCmd()) }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -244,9 +250,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case TickMsg:
+		cmds = append(cmds, tickCmd())
 		if m.searching && m.input.Value() != "" && m.input.Value() != m.currentQuery {
 			m.currentQuery = m.input.Value()
-			return m, performSearch(m.input.Value())
+			cmds = append(cmds, performSearch(m.input.Value()))
 		}
 
 	case []manager.Package:
