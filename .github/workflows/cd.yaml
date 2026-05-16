@@ -66,76 +66,68 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Prepare gopac PKGBUILD
+      - name: Setup SSH
         run: |
-          git clone https://aur.archlinux.org/gopac.git dist-gopac
-          
-          NEW_VER="${GITHUB_REF_NAME#v}"
-          
-          # Calculate checksum for source
-          URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz"
-          curl -L -o source.tar.gz "$URL"
-          SHA256=$(sha256sum source.tar.gz | cut -d' ' -f1)
-          
-          # Apply template
-          sed -e "s/\${PKGVER}/$NEW_VER/g" \
-              -e "s/\${SHA256}/$SHA256/g" \
-              distribution/PKGBUILD > dist-gopac/PKGBUILD
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan -t rsa,ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
+          echo "Host aur.archlinux.org
+            IdentityFile ~/.ssh/aur
+            User aur" > ~/.ssh/config
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "${{ secrets.AUR_USERNAME }}"
+          git config --global user.email "${{ secrets.AUR_EMAIL }}"
+
+      - name: Publish to AUR
+        run: |
+          publish_pkg() {
+            local pkgname=$1
+            local template=$2
+            local is_bin=$3
+            
+            echo "::group::Publishing $pkgname"
+            git clone "aur@aur.archlinux.org:${pkgname}.git" "dist-${pkgname}"
+            
+            local new_ver="${GITHUB_REF_NAME#v}"
+            
+            if [ "$is_bin" = "true" ]; then
+              # BIN package logic: Fetch checksums from released assets
+              local url_bin="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/gopac"
+              local url_lic="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/LICENCE"
+              local url_fish="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/gopac.fish"
               
-          cd dist-gopac
-          # Generate .SRCINFO
-          docker run --rm -v "$(pwd):/pkg" archlinux:latest bash -c "pacman -Syu --noconfirm --needed base-devel >&2 && useradd -m builduser && cp -r /pkg /tmp/work && chown -R builduser:builduser /tmp/work && su builduser -c 'cd /tmp/work && makepkg --printsrcinfo'" > .SRCINFO
-          cd ..
-
-      - name: Publish gopac to AUR
-        uses: KSXGitHub/github-actions-deploy-aur@v2
-        with:
-          pkgname: gopac
-          pkgbuild: ./dist-gopac/PKGBUILD
-          commit_username: ${{ secrets.AUR_USERNAME }}
-          commit_email: ${{ secrets.AUR_EMAIL }}
-          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-          commit_message: "Update to ${{ github.ref_name }}"
-          ssh_keyscan_types: rsa,ed25519
-
-      - name: Prepare gopac-bin PKGBUILD
-        run: |
-          git clone https://aur.archlinux.org/gopac-bin.git dist-gopac-bin
+              local sha_bin=$(curl -L "$url_bin" | sha256sum | cut -d' ' -f1)
+              local sha_lic=$(curl -L "$url_lic" | sha256sum | cut -d' ' -f1)
+              local sha_fish=$(curl -L "$url_fish" | sha256sum | cut -d' ' -f1)
+              
+              sed -e "s/\${PKGVER}/$new_ver/g" \
+                  -e "s/\${SHA256_BIN}/$sha_bin/g" \
+                  -e "s/\${SHA256_LIC}/$sha_lic/g" \
+                  -e "s/\${SHA256_FISH}/$sha_fish/g" \
+                  "$template" > "dist-${pkgname}/PKGBUILD"
+            else
+              # Source package logic: Fetch checksum from source tarball
+              local url="https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz"
+              local sha=$(curl -L "$url" | sha256sum | cut -d' ' -f1)
+              
+              sed -e "s/\${PKGVER}/$new_ver/g" \
+                  -e "s/\${SHA256}/$sha/g" \
+                  "$template" > "dist-${pkgname}/PKGBUILD"
+            fi
+            
+            cd "dist-${pkgname}"
+            # Generate .SRCINFO using Arch Linux container
+            docker run --rm -v "$(pwd):/pkg" archlinux:latest bash -c "pacman -Syu --noconfirm --needed base-devel >&2 && useradd -m builduser && cp -r /pkg /tmp/work && chown -R builduser:builduser /tmp/work && su builduser -c 'cd /tmp/work && makepkg --printsrcinfo'" > .SRCINFO
+            
+            git add PKGBUILD .SRCINFO
+            git diff-index --quiet HEAD || git commit -m "Update to ${{ github.ref_name }}"
+            git push origin master
+            cd ..
+            echo "::endgroup::"
+          }
           
-          NEW_VER="${GITHUB_REF_NAME#v}"
-          
-          # Calculate checksums
-          URL_BIN="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/gopac"
-          curl -L -o gopac "$URL_BIN"
-          SHA256_BIN=$(sha256sum gopac | cut -d' ' -f1)
-
-          URL_LIC="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/LICENCE"
-          curl -L -o LICENCE "$URL_LIC"
-          SHA256_LIC=$(sha256sum LICENCE | cut -d' ' -f1)
-
-          URL_FISH="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/gopac.fish"
-          curl -L -o gopac.fish "$URL_FISH"
-          SHA256_FISH=$(sha256sum gopac.fish | cut -d' ' -f1)
-
-          # Apply template
-          sed -e "s/\${PKGVER}/$NEW_VER/g" \
-              -e "s/\${SHA256_BIN}/$SHA256_BIN/g" \
-              -e "s/\${SHA256_LIC}/$SHA256_LIC/g" \
-              -e "s/\${SHA256_FISH}/$SHA256_FISH/g" \
-              distribution/PKGBUILD-bin > dist-gopac-bin/PKGBUILD
-          
-          cd dist-gopac-bin
-          # Generate .SRCINFO
-          docker run --rm -v "$(pwd):/pkg" archlinux:latest bash -c "pacman -Syu --noconfirm --needed base-devel >&2 && useradd -m builduser && cp -r /pkg /tmp/work && chown -R builduser:builduser /tmp/work && su builduser -c 'cd /tmp/work && makepkg --printsrcinfo'" > .SRCINFO
-          cd ..
-
-      - name: Publish gopac-bin to AUR
-        uses: KSXGitHub/github-actions-deploy-aur@v2
-        with:
-          pkgname: gopac-bin
-          pkgbuild: ./dist-gopac-bin/PKGBUILD
-          commit_username: ${{ secrets.AUR_USERNAME }}
-          commit_email: ${{ secrets.AUR_EMAIL }}
-          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-          commit_message: "Update to ${{ github.ref_name }}"
-          ssh_keyscan_types: rsa,ed25519
+          publish_pkg "gopac" "distribution/PKGBUILD" "false"
+          publish_pkg "gopac-bin" "distribution/PKGBUILD-bin" "true"
