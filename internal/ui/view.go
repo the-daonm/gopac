@@ -78,14 +78,20 @@ func (m Model) View() string {
 		Background(CurrentTheme.Highlight).
 		Render(header)
 
+	totalQueued := len(m.markedInstall) + len(m.markedRemove)
+	queueText := ""
+	if totalQueued > 0 {
+		queueText = fmt.Sprintf(" • 📥 QUEUE: %d (+%d, -%d) Press 'I' to Apply, 'C' to Clear", totalQueued, len(m.markedInstall), len(m.markedRemove))
+	}
+
 	// Dynamic Status Bar
 	var helpText string
 	if m.searching {
-		helpText = "   SEARCHING • Enter: Confirm • Tab: Focus List • Esc: Cancel "
+		helpText = "   SEARCHING • Enter: Confirm • Tab: Focus List • Esc: Cancel " + queueText
 	} else if m.focusSide == 0 {
-		helpText = "   LIST VIEW • ◄/►: Change Filter • Enter: Install • U: Update System • /: Search • ?: Help "
+		helpText = "   LIST VIEW • ◄/►: Change Filter • Enter: Install • U: Update System • Space: Queue • /: Search • ?: Help " + queueText
 	} else {
-		helpText = "   DETAILS • Tab: Focus Search • Esc: Back to List • ?: Help "
+		helpText = "   DETAILS • Tab: Focus Search • Esc: Back to List • ?: Help " + queueText
 	}
 
 	statusBar := lipgloss.NewStyle().
@@ -163,7 +169,10 @@ func (m Model) helpView() string {
 		{"/", "Search packages"},
 		{"U", "Update system packages"},
 		{"Tab", "Cycle focus (Search/List/Details)"},
-		{"Enter", "Install/Remove package"},
+		{"Space", "Queue/unqueue package"},
+		{"I", "Apply queued changes"},
+		{"C", "Clear queue"},
+		{"Enter", "Install/Remove immediately"},
 		{"h/l or ◄/►", "Change tab filter"},
 		{"p", "View PKGBUILD (AUR only)"},
 		{"Up/Down", "Search history (when searching)"},

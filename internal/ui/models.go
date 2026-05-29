@@ -19,18 +19,28 @@ import (
 var tabs = []string{"ALL", "AUR", "OFFICIAL", "INSTALLED"}
 
 type Item struct {
-	Pkg   manager.Package
-	Query string
+	Pkg        manager.Package
+	Query      string
+	MarkedInst bool
+	MarkedRem  bool
 }
 
 func (i Item) Title() string {
 	icon := " "
-	if i.Pkg.IsInstalled {
-		icon = "✓"
-	}
 	baseColor := CurrentTheme.RepoOfficial
 	if i.Pkg.IsAUR {
 		baseColor = CurrentTheme.RepoAUR
+	}
+	iconColor := baseColor
+
+	if i.MarkedInst {
+		icon = ""
+		iconColor = CurrentTheme.Green
+	} else if i.MarkedRem {
+		icon = ""
+		iconColor = CurrentTheme.Red
+	} else if i.Pkg.IsInstalled {
+		icon = "✓"
 	}
 
 	name := i.Pkg.Name
@@ -53,7 +63,7 @@ func (i Item) Title() string {
 	}
 
 	return fmt.Sprintf("%s %s",
-		lipgloss.NewStyle().Foreground(baseColor).Render(icon),
+		lipgloss.NewStyle().Foreground(iconColor).Render(icon),
 		titleSB.String(),
 	)
 }
@@ -74,6 +84,7 @@ type (
 	InstalledMapMsg  map[string]bool
 	PackageDetailMsg manager.Package
 	TickMsg          time.Time
+	bulkDoneMsg      struct{}
 )
 
 type Model struct {
@@ -98,6 +109,8 @@ type Model struct {
 	searchCancel    context.CancelFunc
 	searchHistory   []string
 	historyIdx      int
+	markedInstall   map[string]manager.Package
+	markedRemove    map[string]manager.Package
 }
 
 func NewModel() Model {
@@ -127,6 +140,8 @@ func NewModel() Model {
 	return Model{
 		list: l, input: ti, viewport: viewport.New(0, 0), spinner: s, searching: true, allItems: []Item{}, activeTab: 0, focusSide: 2,
 		searchHistory: []string{}, historyIdx: -1,
+		markedInstall: make(map[string]manager.Package),
+		markedRemove:  make(map[string]manager.Package),
 	}
 }
 
@@ -300,6 +315,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			c := manager.UpdateSystem()
 			return m, tea.ExecProcess(c, func(err error) tea.Msg { return refreshInstalledStatus() })
 
+		case "I":
+			if len(m.markedInstall) > 0 || len(m.markedRemove) > 0 {
+				var toInstallOfficial []string
+				var toInstallAUR []string
+				var toRemove []string
+
+				for name, pkg := range m.markedInstall {
+					if pkg.IsAUR {
+						toInstallAUR = append(toInstallAUR, name)
+					} else {
+						toInstallOfficial = append(toInstallOfficial, name)
+					}
+				}
+				for name := range m.markedRemove {
+					toRemove = append(toRemove, name)
+				}
+
+				c := manager.BulkActionCmd(toInstallOfficial, toInstallAUR, toRemove)
+				if c != nil {
+					return m, tea.ExecProcess(c, func(err error) tea.Msg { return bulkDoneMsg{} })
+				}
+			}
+			return m, nil
+
+		case "C":
+			m.markedInstall = make(map[string]manager.Package)
+			m.markedRemove = make(map[string]manager.Package)
+			m.updateListItems()
+			return m, nil
+
 		case "p":
 			if i, ok := m.list.SelectedItem().(Item); ok && i.Pkg.IsAUR {
 				m.showingPKGBUILD = !m.showingPKGBUILD
@@ -329,6 +374,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					c := manager.InstallOrRemove(i.Pkg.Name, i.Pkg.IsAUR, i.Pkg.IsInstalled)
 					return m, tea.ExecProcess(c, func(err error) tea.Msg { return refreshInstalledStatus() })
 				}
+			case " ":
+				if i, ok := m.list.SelectedItem().(Item); ok {
+					name := i.Pkg.Name
+					if i.Pkg.IsInstalled {
+						if _, exists := m.markedRemove[name]; exists {
+							delete(m.markedRemove, name)
+						} else {
+							m.markedRemove[name] = i.Pkg
+						}
+					} else {
+						if _, exists := m.markedInstall[name]; exists {
+							delete(m.markedInstall, name)
+						} else {
+							m.markedInstall[name] = i.Pkg
+						}
+					}
+					m.updateListItems()
+				}
+				return m, nil
 			}
 			m.list, cmd = m.list.Update(msg)
 			cmds = append(cmds, cmd)
@@ -378,6 +442,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.updateListItems()
+
+	case bulkDoneMsg:
+		m.markedInstall = make(map[string]manager.Package)
+		m.markedRemove = make(map[string]manager.Package)
+		return m, refreshInstalledStatus
 	}
 
 	if i, ok := m.list.SelectedItem().(Item); ok {
@@ -405,8 +474,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) updateListItems() {
 	var filtered []list.Item
 	mode := tabs[m.activeTab]
-	for _, item := range m.allItems {
-		item.Query = m.currentQuery
+	for i := range m.allItems {
+		m.allItems[i].Query = m.currentQuery
+		_, m.allItems[i].MarkedInst = m.markedInstall[m.allItems[i].Pkg.Name]
+		_, m.allItems[i].MarkedRem = m.markedRemove[m.allItems[i].Pkg.Name]
+
+		item := m.allItems[i]
 		switch mode {
 		case "ALL":
 			filtered = append(filtered, item)

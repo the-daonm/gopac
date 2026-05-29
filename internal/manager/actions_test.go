@@ -121,3 +121,24 @@ func TestInstallOrRemove(t *testing.T) {
 	// Reset helper
 	SetAURHelper("")
 }
+
+func TestBulkActionCmd(t *testing.T) {
+	SetAURHelper("yay")
+	defer SetAURHelper("")
+
+	cmd := BulkActionCmd([]string{"git", "curl"}, []string{"yay-git"}, []string{"vim", "nano"})
+	if cmd == nil {
+		t.Fatal("Expected non-nil command")
+	}
+
+	expectedArgs := []string{"sh", "-c", "sudo pacman -Rns vim nano && sudo pacman -S git curl && yay -S yay-git"}
+	if len(cmd.Args) != len(expectedArgs) {
+		t.Fatalf("Expected %d arguments, got %d. Args: %v", len(expectedArgs), len(cmd.Args), cmd.Args)
+	}
+
+	for i, arg := range cmd.Args {
+		if arg != expectedArgs[i] {
+			t.Errorf("Expected arg %d to be %q, got %q", i, expectedArgs[i], arg)
+		}
+	}
+}

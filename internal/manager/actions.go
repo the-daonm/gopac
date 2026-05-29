@@ -3,6 +3,7 @@ package manager
 import (
 	"os"
 	"os/exec"
+	"strings"
 )
 
 var aurHelper string
@@ -73,3 +74,37 @@ func InstallOrRemove(pkgName string, isAUR bool, remove bool) *exec.Cmd {
 	cmd.Stderr = os.Stderr
 	return cmd
 }
+
+func BulkActionCmd(toInstallOfficial []string, toInstallAUR []string, toRemove []string) *exec.Cmd {
+	var commands []string
+
+	if len(toRemove) > 0 {
+		commands = append(commands, "sudo pacman -Rns "+strings.Join(toRemove, " "))
+	}
+
+	if len(toInstallOfficial) > 0 {
+		commands = append(commands, "sudo pacman -S "+strings.Join(toInstallOfficial, " "))
+	}
+
+	if len(toInstallAUR) > 0 {
+		helper := detectAURHelper()
+		flag := "-S"
+		if helper == "aura" {
+			flag = "-A"
+		}
+		commands = append(commands, helper+" "+flag+" "+strings.Join(toInstallAUR, " "))
+	}
+
+	if len(commands) == 0 {
+		return nil
+	}
+
+	// Join commands with " && " and run via sh -c
+	fullCmd := strings.Join(commands, " && ")
+	cmd := exec.Command("sh", "-c", fullCmd)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd
+}
+
