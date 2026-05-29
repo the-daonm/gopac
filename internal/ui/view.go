@@ -47,11 +47,7 @@ func (m Model) View() string {
 	gapWidth := lipgloss.Width(gap)
 
 	fixedContentWidth := lipgloss.Width(logo) + lipgloss.Width(tabsView) + (gapWidth * 2)
-	availableSearchWidth := m.width - fixedContentWidth
-
-	if availableSearchWidth < 5 {
-		availableSearchWidth = 5
-	}
+	availableSearchWidth := max(m.width-fixedContentWidth, 5)
 
 	spin := ""
 	if m.isSearching {
@@ -161,7 +157,7 @@ func (m Model) View() string {
 
 func (m Model) helpView() string {
 	title := HeaderStyle.Render(" GOPAC HELP ")
-	
+
 	rows := []struct {
 		Key  string
 		Desc string
@@ -182,17 +178,20 @@ func (m Model) helpView() string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("\n" + title + "\n\n")
-	
+	sb.WriteByte('\n')
+	sb.WriteString(title)
+	sb.WriteString("\n\n")
+
 	for _, r := range rows {
 		key := lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Bold(true).Width(15).Render(r.Key)
 		desc := lipgloss.NewStyle().Foreground(CurrentTheme.Text).Render(r.Desc)
-		sb.WriteString(fmt.Sprintf("%s %s\n", key, desc))
+		fmt.Fprintf(&sb, "%s %s\n", key, desc)
 	}
 
-	sb.WriteString("\n" + lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render("Press '?' to close help"))
+	sb.WriteByte('\n')
+	sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render("Press '?' to close help"))
 
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, 
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
 		lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(CurrentTheme.Focus).

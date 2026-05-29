@@ -7,12 +7,7 @@ import (
 )
 
 func TestLoad(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "gopac-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
+	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	// No config file

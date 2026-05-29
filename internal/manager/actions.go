@@ -32,7 +32,7 @@ func detectAURHelper() string {
 		}
 	}
 
-	return "paru"
+	return "pacman"
 }
 
 func UpdateSystem() *exec.Cmd {
@@ -55,17 +55,17 @@ func InstallOrRemove(pkgName string, isAUR bool, remove bool) *exec.Cmd {
 	var cmd *exec.Cmd
 
 	if remove {
-		cmd = exec.Command("sudo", "pacman", "-Rns", pkgName)
+		cmd = exec.Command("sudo", "pacman", "-Rns", "--", pkgName)
 	} else {
 		if isAUR {
 			helper := detectAURHelper()
-			args := []string{"-S", pkgName}
+			args := []string{"-S", "--", pkgName}
 			if helper == "aura" {
-				args = []string{"-A", pkgName}
+				args = []string{"-A", "--", pkgName}
 			}
 			cmd = exec.Command(helper, args...)
 		} else {
-			cmd = exec.Command("sudo", "pacman", "-S", pkgName)
+			cmd = exec.Command("sudo", "pacman", "-S", "--", pkgName)
 		}
 	}
 
@@ -79,11 +79,11 @@ func BulkActionCmd(toInstallOfficial []string, toInstallAUR []string, toRemove [
 	var commands []string
 
 	if len(toRemove) > 0 {
-		commands = append(commands, "sudo pacman -Rns "+strings.Join(toRemove, " "))
+		commands = append(commands, "sudo pacman -Rns -- "+strings.Join(toRemove, " "))
 	}
 
 	if len(toInstallOfficial) > 0 {
-		commands = append(commands, "sudo pacman -S "+strings.Join(toInstallOfficial, " "))
+		commands = append(commands, "sudo pacman -S -- "+strings.Join(toInstallOfficial, " "))
 	}
 
 	if len(toInstallAUR) > 0 {
@@ -92,7 +92,7 @@ func BulkActionCmd(toInstallOfficial []string, toInstallAUR []string, toRemove [
 		if helper == "aura" {
 			flag = "-A"
 		}
-		commands = append(commands, helper+" "+flag+" "+strings.Join(toInstallAUR, " "))
+		commands = append(commands, helper+" "+flag+" -- "+strings.Join(toInstallAUR, " "))
 	}
 
 	if len(commands) == 0 {
@@ -107,4 +107,3 @@ func BulkActionCmd(toInstallOfficial []string, toInstallAUR []string, toRemove [
 	cmd.Stderr = os.Stderr
 	return cmd
 }
-

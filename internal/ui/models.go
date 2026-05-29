@@ -87,6 +87,12 @@ type (
 	bulkDoneMsg      struct{}
 )
 
+type searchResultsMsg struct {
+	query string
+	pkgs  []manager.Package
+	err   error
+}
+
 type Model struct {
 	list            list.Model
 	input           textinput.Model
@@ -100,7 +106,6 @@ type Model struct {
 	listWidth       int
 	descWidth       int
 	panelHeight     int
-	lastID          int
 	currentQuery    string
 	lastSelectedPkg string
 	showingPKGBUILD bool
@@ -111,6 +116,7 @@ type Model struct {
 	historyIdx      int
 	markedInstall   map[string]manager.Package
 	markedRemove    map[string]manager.Package
+	loadingDetailsFor string
 }
 
 func NewModel() Model {
@@ -142,6 +148,7 @@ func NewModel() Model {
 		searchHistory: []string{}, historyIdx: -1,
 		markedInstall: make(map[string]manager.Package),
 		markedRemove:  make(map[string]manager.Package),
+		loadingDetailsFor: "",
 	}
 }
 
@@ -165,10 +172,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 
-		m.panelHeight = m.height - 4
-		if m.panelHeight < 5 {
-			m.panelHeight = 5
-		}
+		m.panelHeight = max(m.height-4, 5)
 
 		m.listWidth = int(float64(m.width) * 0.35)
 		m.descWidth = m.width - m.listWidth
@@ -185,7 +189,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseMsg:
-		if msg.Type == tea.MouseLeft {
+		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
 			if msg.Y == 0 {
 				// Check if click was in the search bar area or tabs area
 				// Simple approximation: tabs are on the right
@@ -196,6 +200,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.focusSide = 2
 					m.searching = true
 					m.input.Focus()
+					m.historyIdx = len(m.searchHistory)
 				}
 			} else {
 				if msg.X < m.listWidth {
@@ -225,6 +230,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focusSide == 2 {
 				m.searching = true
 				m.input.Focus()
+				m.historyIdx = len(m.searchHistory)
 			} else {
 				m.searching = false
 				m.input.Blur()
@@ -237,6 +243,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focusSide == 2 {
 				m.searching = true
 				m.input.Focus()
+				m.historyIdx = len(m.searchHistory)
 			} else {
 				m.searching = false
 				m.input.Blur()
@@ -251,6 +258,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusSide = 0 // Auto focus list
 				m.currentQuery = m.input.Value()
 
+				if m.searchCancel != nil {
+					m.searchCancel()
+					m.searchCancel = nil
+				}
+
+				if m.currentQuery == "" {
+					m.allItems = []Item{}
+					m.updateListItems()
+					m.isSearching = false
+					return m, nil
+				}
+
 				if m.input.Value() != "" {
 					// Add to history if not same as last
 					if len(m.searchHistory) == 0 || m.searchHistory[len(m.searchHistory)-1] != m.input.Value() {
@@ -259,9 +278,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.historyIdx = len(m.searchHistory)
 				}
 
-				if m.searchCancel != nil {
-					m.searchCancel()
-				}
 				ctx, cancel := context.WithCancel(context.Background())
 				m.searchCancel = cancel
 				m.isSearching = true
@@ -306,6 +322,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.focusSide = 2
 			m.searching = true
 			m.input.Focus()
+			m.historyIdx = len(m.searchHistory)
 			return m, textinput.Blink
 
 		case "q":
@@ -361,7 +378,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		if m.focusSide == 0 {
+		switch m.focusSide {
+		case 0:
 			switch msg.String() {
 			case "left", "h":
 				m.activeTab = (m.activeTab - 1 + len(tabs)) % len(tabs)
@@ -396,30 +414,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.list, cmd = m.list.Update(msg)
 			cmds = append(cmds, cmd)
-		} else if m.focusSide == 1 {
+		case 1:
 			m.viewport, cmd = m.viewport.Update(msg)
 			cmds = append(cmds, cmd)
 		}
 
 	case TickMsg:
 		cmds = append(cmds, tickCmd())
-		if m.searching && m.input.Value() != "" && m.input.Value() != m.currentQuery {
+		if m.searching && m.input.Value() != m.currentQuery {
 			m.currentQuery = m.input.Value()
 			if m.searchCancel != nil {
 				m.searchCancel()
+				m.searchCancel = nil
 			}
-			ctx, cancel := context.WithCancel(context.Background())
-			m.searchCancel = cancel
-			m.isSearching = true
-			cmds = append(cmds, performSearch(ctx, m.input.Value()))
+			if m.currentQuery == "" {
+				m.allItems = []Item{}
+				m.updateListItems()
+				m.isSearching = false
+			} else {
+				ctx, cancel := context.WithCancel(context.Background())
+				m.searchCancel = cancel
+				m.isSearching = true
+				cmds = append(cmds, performSearch(ctx, m.input.Value()))
+			}
 		}
 
-	case []manager.Package:
+	case searchResultsMsg:
+		if msg.query != m.currentQuery {
+			// Outdated search result, ignore it!
+			return m, nil
+		}
 		m.isSearching = false
-		if msg != nil {
-			items := make([]Item, len(msg))
-			for i, pkg := range msg {
-				items[i] = Item{Pkg: pkg, Query: m.currentQuery}
+		if msg.err == nil && msg.pkgs != nil {
+			items := make([]Item, len(msg.pkgs))
+			for i, pkg := range msg.pkgs {
+				items[i] = Item{Pkg: pkg, Query: msg.query}
 			}
 			m.allItems = items
 			m.updateListItems()
@@ -436,6 +465,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateListItems()
 
 	case PackageDetailMsg:
+		if msg.Name == m.loadingDetailsFor {
+			m.loadingDetailsFor = ""
+		}
 		for i := range m.allItems {
 			if m.allItems[i].Pkg.Name == msg.Name {
 				m.allItems[i].Pkg = manager.Package(msg)
@@ -453,6 +485,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if i.Pkg.Name != m.lastSelectedPkg {
 			m.lastSelectedPkg = i.Pkg.Name
 			m.showingPKGBUILD = false
+			m.loadingDetailsFor = ""
 			m.viewport.GotoTop()
 		}
 
@@ -462,7 +495,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.SetContent(renderDescription(i.Pkg, m.viewport.Width))
 		}
 
-		if !i.Pkg.Detailed && m.lastSelectedPkg == i.Pkg.Name {
+		if !i.Pkg.Detailed && m.loadingDetailsFor != i.Pkg.Name {
+			m.loadingDetailsFor = i.Pkg.Name
 			cmds = append(cmds, fetchDetails(i.Pkg))
 		}
 	} else {
@@ -505,8 +539,8 @@ func performSearch(ctx context.Context, query string) tea.Cmd {
 		return nil
 	}
 	return func() tea.Msg {
-		res, _ := manager.SearchContext(ctx, query)
-		return res
+		res, err := manager.SearchContext(ctx, query)
+		return searchResultsMsg{query: query, pkgs: res, err: err}
 	}
 }
 
@@ -532,13 +566,13 @@ func renderDescription(p manager.Package, width int) string {
 
 	if p.IsAUR {
 		headerStyle = headerStyle.Foreground(CurrentTheme.RepoAUR)
-		sb.WriteString(fmt.Sprintf("\n%s\n\n", headerStyle.Render(p.Name)))
+		fmt.Fprintf(&sb, "\n%s\n\n", headerStyle.Render(p.Name))
 
 		row := func(k, v string) {
 			if v == "" {
 				return
 			}
-			sb.WriteString(fmt.Sprintf("%s : %s\n", keyStyle.Render(k), valStyle.Render(v)))
+			fmt.Fprintf(&sb, "%s : %s\n", keyStyle.Render(k), valStyle.Render(v))
 		}
 
 		row("Repository", "AUR")
@@ -558,19 +592,19 @@ func renderDescription(p manager.Package, width int) string {
 		}
 
 		if len(p.Depends) > 0 {
-			sb.WriteString(fmt.Sprintf("\n%s\n%s\n", lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Bold(true).Render("Dependencies"), valStyle.Render(strings.Join(p.Depends, "  "))))
+			fmt.Fprintf(&sb, "\n%s\n%s\n", lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Bold(true).Render("Dependencies"), valStyle.Render(strings.Join(p.Depends, "  ")))
 		}
 		if len(p.MakeDepends) > 0 {
-			sb.WriteString(fmt.Sprintf("%s : %s\n", keyStyle.Render("Make Deps"), valStyle.Render(strings.Join(p.MakeDepends, "  "))))
+			fmt.Fprintf(&sb, "%s : %s\n", keyStyle.Render("Make Deps"), valStyle.Render(strings.Join(p.MakeDepends, "  ")))
 		}
 
 		sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render("\n[ PKGBUILD ]"))
 
 	} else {
-		sb.WriteString(fmt.Sprintf("\n%s\n\n", headerStyle.Render(p.Name)))
+		fmt.Fprintf(&sb, "\n%s\n\n", headerStyle.Render(p.Name))
 
 		row := func(k, v string) {
-			sb.WriteString(fmt.Sprintf("%s : %s\n", keyStyle.Render(k), valStyle.Render(v)))
+			fmt.Fprintf(&sb, "%s : %s\n", keyStyle.Render(k), valStyle.Render(v))
 		}
 		listRow := func(k string, v []string) {
 			if len(v) == 0 {
@@ -621,15 +655,19 @@ func renderPKGBUILD(p manager.Package, width int) string {
 	if p.PKGBUILD == "" {
 		sb.WriteString("Loading PKGBUILD or not available...")
 	} else {
-		lines := strings.Split(p.PKGBUILD, "\n")
-		for _, line := range lines {
+		for line := range strings.SplitSeq(p.PKGBUILD, "\n") {
 			if strings.HasPrefix(strings.TrimSpace(line), "#") {
-				sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render(line) + "\n")
+				sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render(line))
+				sb.WriteByte('\n')
 			} else if strings.Contains(line, "=") {
 				parts := strings.SplitN(line, "=", 2)
-				sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Blue).Render(parts[0]) + "=" + lipgloss.NewStyle().Foreground(CurrentTheme.Text).Render(parts[1]) + "\n")
+				sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Blue).Render(parts[0]))
+				sb.WriteByte('=')
+				sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Text).Render(parts[1]))
+				sb.WriteByte('\n')
 			} else {
-				sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Text).Render(line) + "\n")
+				sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Text).Render(line))
+				sb.WriteByte('\n')
 			}
 		}
 	}

@@ -3,6 +3,7 @@ package manager
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -13,8 +14,8 @@ func TestDetectAURHelper(t *testing.T) {
 
 	// Create a temp dir for our "binaries"
 	tmpDir := t.TempDir()
-	
-	// Override PATH to only look in tmpDir + basic system paths if needed, 
+
+	// Override PATH to only look in tmpDir + basic system paths if needed,
 	// but strictly tmpDir ensures we don't accidentally find real tools.
 	// However, exec.LookPath might behave differently on some OSs if PATH is just one dir.
 	// On Linux it's fine.
@@ -25,10 +26,10 @@ func TestDetectAURHelper(t *testing.T) {
 		aurHelper = ""
 	}
 
-	// 1. Test with no helpers (should fallback to paru)
+	// 1. Test with no helpers (should fallback to pacman)
 	reset()
-	if h := detectAURHelper(); h != "paru" {
-		t.Errorf("Scenario 1 (No helpers): Expected fallback 'paru', got '%s'", h)
+	if h := detectAURHelper(); h != "pacman" {
+		t.Errorf("Scenario 1 (No helpers): Expected fallback 'pacman', got '%s'", h)
 	}
 
 	// 2. Test with 'yay' existing
@@ -74,13 +75,7 @@ func TestInstallOrRemove(t *testing.T) {
 	SetAURHelper("aura")
 	cmd := InstallOrRemove("some-package", true, false)
 	// Expect -A
-	foundA := false
-	for _, arg := range cmd.Args {
-		if arg == "-A" {
-			foundA = true
-			break
-		}
-	}
+	foundA := slices.Contains(cmd.Args, "-A")
 	if !foundA {
 		t.Errorf("Scenario 1 (aura): Expected '-A' flag, got %v", cmd.Args)
 	}
@@ -89,35 +84,21 @@ func TestInstallOrRemove(t *testing.T) {
 	SetAURHelper("yay")
 	cmd = InstallOrRemove("some-package", true, false)
 	// Expect -S
-	foundS := false
-	for _, arg := range cmd.Args {
-		if arg == "-S" {
-			foundS = true
-			break
-		}
-	}
+	foundS := slices.Contains(cmd.Args, "-S")
 	if !foundS {
 		t.Errorf("Scenario 2 (yay): Expected '-S' flag, got %v", cmd.Args)
 	}
 
 	// 3. Test Official install (should ignore helper)
-	SetAURHelper("aura") // Even if helper is aura
+	SetAURHelper("aura")                                // Even if helper is aura
 	cmd = InstallOrRemove("some-package", false, false) // isAUR = false
 	// Expect pacman -S
-	foundPacman := false
-	foundS = false
-	for _, arg := range cmd.Args {
-		if arg == "pacman" {
-			foundPacman = true
-		}
-		if arg == "-S" {
-			foundS = true
-		}
-	}
+	foundPacman := slices.Contains(cmd.Args, "pacman")
+	foundS = slices.Contains(cmd.Args, "-S")
 	if !foundPacman || !foundS {
 		t.Errorf("Scenario 3 (official): Expected 'pacman' and '-S', got %v", cmd.Args)
 	}
-	
+
 	// Reset helper
 	SetAURHelper("")
 }
@@ -131,7 +112,7 @@ func TestBulkActionCmd(t *testing.T) {
 		t.Fatal("Expected non-nil command")
 	}
 
-	expectedArgs := []string{"sh", "-c", "sudo pacman -Rns vim nano && sudo pacman -S git curl && yay -S yay-git"}
+	expectedArgs := []string{"sh", "-c", "sudo pacman -Rns -- vim nano && sudo pacman -S -- git curl && yay -S -- yay-git"}
 	if len(cmd.Args) != len(expectedArgs) {
 		t.Fatalf("Expected %d arguments, got %d. Args: %v", len(expectedArgs), len(cmd.Args), cmd.Args)
 	}

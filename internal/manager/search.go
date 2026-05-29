@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
+	"net/url"
+	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -49,8 +52,8 @@ type Package struct {
 	PKGBUILD       string
 }
 
-func Search(query string) ([]Package, error) {
-	return SearchContext(context.Background(), query)
+var httpClient = &http.Client{
+	Timeout: 15 * time.Second,
 }
 
 func SearchContext(ctx context.Context, query string) ([]Package, error) {
@@ -59,17 +62,15 @@ func SearchContext(ctx context.Context, query string) ([]Package, error) {
 	var wg sync.WaitGroup
 
 	// Search Local Repos (pacman)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 		}
 
-		cmd := exec.CommandContext(ctx, "pacman", "-Ss", query)
-		cmd.Env = append(cmd.Env, "LC_ALL=C")
+		cmd := exec.CommandContext(ctx, "pacman", "-Ss", "--", query)
+		cmd.Env = append(os.Environ(), "LC_ALL=C")
 		out, err := cmd.Output()
 		if err != nil && ctx.Err() != nil {
 			return
@@ -79,12 +80,10 @@ func SearchContext(ctx context.Context, query string) ([]Package, error) {
 		mu.Lock()
 		results = append(results, localPkgs...)
 		mu.Unlock()
-	}()
+	})
 
 	// Search AUR (RPC API)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		select {
 		case <-ctx.Done():
 			return
@@ -97,7 +96,7 @@ func SearchContext(ctx context.Context, query string) ([]Package, error) {
 			results = append(results, aurPkgs...)
 			mu.Unlock()
 		}
-	}()
+	})
 
 	wg.Wait()
 
@@ -126,8 +125,8 @@ func GetPackageDetails(p *Package) error {
 }
 
 func GetPKGBUILD(pkgName string) (string, error) {
-	url := fmt.Sprintf("https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=%s", pkgName)
-	resp, err := http.Get(url)
+	urlStr := fmt.Sprintf("https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=%s", url.QueryEscape(pkgName))
+	resp, err := httpClient.Get(urlStr)
 	if err != nil {
 		return "", err
 	}
@@ -152,8 +151,8 @@ func GetPKGBUILD(pkgName string) (string, error) {
 }
 
 func getAURDetails(p *Package) error {
-	url := fmt.Sprintf("https://aur.archlinux.org/rpc/?v=5&type=info&arg[]=%s", p.Name)
-	resp, err := http.Get(url)
+	urlStr := fmt.Sprintf("https://aur.archlinux.org/rpc/?v=5&type=info&arg[]=%s", url.QueryEscape(p.Name))
+	resp, err := httpClient.Get(urlStr)
 	if err != nil {
 		return err
 	}
@@ -216,8 +215,8 @@ func getAURDetails(p *Package) error {
 }
 
 func getPacmanDetails(p *Package, flag string) error {
-	cmd := exec.Command("pacman", flag, p.Name)
-	cmd.Env = append(cmd.Env, "LC_ALL=C")
+	cmd := exec.Command("pacman", flag, "--", p.Name)
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	out, err := cmd.Output()
 	if err != nil {
 		return err
@@ -359,18 +358,14 @@ func sortPackages(pkgs []Package, query string) {
 	})
 }
 
-func searchAUR(query string) ([]Package, error) {
-	return searchAURContext(context.Background(), query)
-}
-
 func searchAURContext(ctx context.Context, query string) ([]Package, error) {
-	url := fmt.Sprintf("https://aur.archlinux.org/rpc/?v=5&type=search&by=name&arg=%s", query)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	urlStr := fmt.Sprintf("https://aur.archlinux.org/rpc/?v=5&type=search&by=name&arg=%s", url.QueryEscape(query))
+	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -467,7 +462,7 @@ func RefreshInstalledCache() {
 		return
 	}
 	newCache := make(map[string]bool)
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		if line != "" {
 			newCache[line] = true
 		}
@@ -481,9 +476,7 @@ func GetInstalledCache() map[string]bool {
 	cacheMu.RLock()
 	defer cacheMu.RUnlock()
 	copy := make(map[string]bool)
-	for k, v := range installedCache {
-		copy[k] = v
-	}
+	maps.Copy(copy, installedCache)
 	return copy
 }
 
