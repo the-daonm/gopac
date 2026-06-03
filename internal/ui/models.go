@@ -133,7 +133,7 @@ func NewModel() Model {
 	ti.TextStyle = lipgloss.NewStyle().Foreground(CurrentTheme.Focus)
 
 	s := spinner.New()
-	s.Spinner = spinner.Dot
+	s.Spinner = spinner.Line
 	s.Style = lipgloss.NewStyle().Foreground(CurrentTheme.Focus)
 
 	delegate := list.NewDefaultDelegate()
@@ -313,7 +313,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.searching = false
 				m.input.Blur()
 				m.focusSide = 0 // Auto focus list
-				m.currentQuery = m.input.Value()
+				m.currentQuery = strings.TrimSpace(m.input.Value())
 
 				if m.searchCancel != nil {
 					m.searchCancel()
@@ -338,7 +338,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				ctx, cancel := context.WithCancel(context.Background())
 				m.searchCancel = cancel
 				m.isSearching = true
-				return m, performSearch(ctx, m.input.Value())
+				return m, performSearch(ctx, m.currentQuery)
 			}
 			if msg.String() == "esc" {
 				m.searching = false
@@ -487,27 +487,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.list, cmd = m.list.Update(msg)
 			cmds = append(cmds, cmd)
 		case 1:
+			switch msg.String() {
+			case "esc":
+				m.focusSide = 0
+				return m, nil
+			case "up", "k":
+				m.viewport.LineUp(1)
+			case "down", "j":
+				m.viewport.LineDown(1)
+			case "ctrl+u":
+				m.viewport.LineUp(10)
+			case "ctrl+d":
+				m.viewport.LineDown(10)
+			}
 			m.viewport, cmd = m.viewport.Update(msg)
 			cmds = append(cmds, cmd)
 		}
 
 	case TickMsg:
 		cmds = append(cmds, tickCmd())
-		if m.searching && m.input.Value() != m.currentQuery {
-			m.currentQuery = m.input.Value()
-			if m.searchCancel != nil {
-				m.searchCancel()
-				m.searchCancel = nil
-			}
-			if m.currentQuery == "" {
-				m.allItems = []Item{}
-				m.updateListItems()
-				m.isSearching = false
-			} else {
-				ctx, cancel := context.WithCancel(context.Background())
-				m.searchCancel = cancel
-				m.isSearching = true
-				cmds = append(cmds, performSearch(ctx, m.input.Value()))
+		if m.searching {
+			trimmedVal := strings.TrimSpace(m.input.Value())
+			if trimmedVal != m.currentQuery {
+				m.currentQuery = trimmedVal
+				if m.searchCancel != nil {
+					m.searchCancel()
+					m.searchCancel = nil
+				}
+				if m.currentQuery == "" {
+					m.allItems = []Item{}
+					m.updateListItems()
+					m.isSearching = false
+				} else {
+					ctx, cancel := context.WithCancel(context.Background())
+					m.searchCancel = cancel
+					m.isSearching = true
+					cmds = append(cmds, performSearch(ctx, trimmedVal))
+				}
 			}
 		}
 
@@ -517,7 +533,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.isSearching = false
-		if msg.err == nil && msg.pkgs != nil {
+		if msg.err == nil {
 			items := make([]Item, len(msg.pkgs))
 			for i, pkg := range msg.pkgs {
 				items[i] = Item{Pkg: pkg, Query: msg.query}
@@ -721,13 +737,17 @@ func renderDescription(p manager.Package, width int) string {
 
 func renderPKGBUILD(p manager.Package, width int) string {
 	var sb strings.Builder
+	sb.WriteString("\n")
 	sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.RepoAUR).Bold(true).Render("PKGBUILD for " + p.Name))
-	sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render("  (Press 'p' to go back)\n\n"))
+	sb.WriteString("\n")
+	sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render("(Press 'p' to go back)"))
+	sb.WriteString("\n\n")
 
 	if p.PKGBUILD == "" {
 		sb.WriteString("Loading PKGBUILD or not available...")
 	} else {
 		for line := range strings.SplitSeq(p.PKGBUILD, "\n") {
+			line = strings.TrimSuffix(line, "\r")
 			if strings.HasPrefix(strings.TrimSpace(line), "#") {
 				sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render(line))
 				sb.WriteByte('\n')
@@ -743,7 +763,7 @@ func renderPKGBUILD(p manager.Package, width int) string {
 			}
 		}
 	}
-	return lipgloss.NewStyle().Width(width).Render(sb.String())
+	return sb.String()
 }
 
 func fetchDetails(p manager.Package) tea.Cmd {

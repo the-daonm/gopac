@@ -51,18 +51,33 @@ func (m Model) View() string {
 	gapWidth := lipgloss.Width(gap)
 
 	fixedContentWidth := lipgloss.Width(logo) + lipgloss.Width(tabsView) + (gapWidth * 2)
-	availableSearchWidth := max(m.width-fixedContentWidth, 5)
+	availableSearchWidth := max(m.width-fixedContentWidth, 10)
 
-	spin := ""
+	spin := "  "
 	if m.isSearching {
 		spin = m.spinner.View() + " "
 	}
 
-	searchView := InputStyle.
-		Width(availableSearchWidth).
-		Background(CurrentTheme.Highlight).
+	// Calculate input width dynamically inside the pill shape
+	middleWidth := availableSearchWidth - 2 // 2 for the rounded corners  and 
+	inputWidth := middleWidth - 4
+	if inputWidth < 5 {
+		inputWidth = 5
+	}
+	m.input.Width = inputWidth
+	middleWidth = inputWidth + 4
+
+	// Build the pill-shaped search input box
+	leftPill := lipgloss.NewStyle().Foreground(CurrentTheme.Base).Background(CurrentTheme.Highlight).Render("")
+	rightPill := lipgloss.NewStyle().Foreground(CurrentTheme.Base).Background(CurrentTheme.Highlight).Render("")
+	
+	searchContent := lipgloss.NewStyle().
+		Background(CurrentTheme.Base).
 		Foreground(searchBorderColor).
+		Width(middleWidth).
 		Render(spin + searchIcon + m.input.View())
+
+	searchView := leftPill + searchContent + rightPill
 
 	// Join Header Elements
 	header := lipgloss.JoinHorizontal(lipgloss.Top,
@@ -87,11 +102,11 @@ func (m Model) View() string {
 	// Dynamic Status Bar
 	var helpText string
 	if m.searching {
-		helpText = "   SEARCHING • Enter: Confirm • Tab: Focus List • Esc: Cancel " + queueText
+		helpText = "   SEARCHING • Enter: Search • Tab: Focus List • Esc: Cancel " + queueText
 	} else if m.focusSide == 0 {
-		helpText = "   LIST VIEW • ◄/►: Change Filter • Enter: Install • U: Update System • Space: Queue • /: Search • ?: Help " + queueText
+		helpText = "   LIST VIEW • h/l: Change Tab • Enter: Install/Remove • Space: Queue • Tab: Focus Details • /: Search • ?: Help " + queueText
 	} else {
-		helpText = "   DETAILS • Tab: Focus Search • Esc: Back to List • ?: Help " + queueText
+		helpText = "   DETAILS • j/k: Scroll • Esc: Back to List • Tab: Focus Search • ?: Help " + queueText
 	}
 
 	statusBar := lipgloss.NewStyle().
@@ -170,10 +185,12 @@ func (m Model) helpView() string {
 		{"U", "Update system packages"},
 		{"Tab", "Cycle focus (Search/List/Details)"},
 		{"Space", "Queue/unqueue package"},
-		{"I", "Apply queued changes"},
+		{"I", "Apply queued changes (Confirm)"},
 		{"C", "Clear queue"},
-		{"Enter", "Install/Remove immediately"},
+		{"Enter", "Install/Remove (Confirm)"},
 		{"h/l or ◄/►", "Change tab filter"},
+		{"j/k or Up/Down", "Scroll details (in Details view)"},
+		{"Esc", "Return to list view (in Details view)"},
 		{"p", "View PKGBUILD (AUR only)"},
 		{"Up/Down", "Search history (when searching)"},
 		{"Mouse", "Click to focus panels or tabs"},
@@ -204,70 +221,96 @@ func (m Model) helpView() string {
 }
 
 func (m Model) confirmView() string {
-	title := lipgloss.NewStyle().
+	var sections []string
+
+	// Header
+	header := lipgloss.NewStyle().
 		Foreground(CurrentTheme.Base).
 		Background(CurrentTheme.Yellow).
 		Bold(true).
-		Padding(0, 2).
+		Padding(0, 3).
 		Render(" ACTION REQUIRED ")
 
-	var sb strings.Builder
-	sb.WriteByte('\n')
-	sb.WriteString(title)
-	sb.WriteString("\n\n")
+	sections = append(sections, header, "")
 
-	sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Text).Bold(true).Render("The following actions will be executed:"))
-	sb.WriteString("\n\n")
+	// Subtitle
+	sections = append(sections, lipgloss.NewStyle().Foreground(CurrentTheme.Text).Bold(true).Render("The following system actions will be performed:"))
+	sections = append(sections, "")
 
-	hasAUR := len(m.confirmInstallAUR) > 0
+	// Format categories
+	bulletColorOfficial := CurrentTheme.RepoOfficial
+	bulletColorAUR := CurrentTheme.RepoAUR
+	bulletColorRemove := CurrentTheme.Red
+
+	renderPkgList := func(pkgs []string, bulletColor lipgloss.Color) string {
+		if len(pkgs) == 0 {
+			return ""
+		}
+		bullet := lipgloss.NewStyle().Foreground(bulletColor).Render("•")
+		if len(pkgs) <= 5 {
+			var lines []string
+			for _, p := range pkgs {
+				lines = append(lines, fmt.Sprintf("  %s %s", bullet, lipgloss.NewStyle().Foreground(CurrentTheme.Text).Render(p)))
+			}
+			return strings.Join(lines, "\n")
+		} else {
+			var lines []string
+			for i := 0; i < 5; i++ {
+				lines = append(lines, fmt.Sprintf("  %s %s", bullet, lipgloss.NewStyle().Foreground(CurrentTheme.Text).Render(pkgs[i])))
+			}
+			remaining := len(pkgs) - 5
+			lines = append(lines, fmt.Sprintf("  %s %s", bullet, lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Italic(true).Render(fmt.Sprintf("... and %d more", remaining))))
+			return strings.Join(lines, "\n")
+		}
+	}
 
 	if len(m.confirmInstallOfficial) > 0 {
-		sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.RepoOfficial).Bold(true).Render("📥 Install (Official):"))
-		sb.WriteString("\n")
-		for _, pkg := range m.confirmInstallOfficial {
-			sb.WriteString(fmt.Sprintf("  • %s\n", pkg))
-		}
-		sb.WriteString("\n")
+		label := lipgloss.NewStyle().Foreground(CurrentTheme.RepoOfficial).Bold(true).Render("📥 Install (Official):")
+		list := renderPkgList(m.confirmInstallOfficial, bulletColorOfficial)
+		sections = append(sections, label, list, "")
 	}
 
 	if len(m.confirmInstallAUR) > 0 {
-		sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.RepoAUR).Bold(true).Render("📥 Install (AUR):"))
-		sb.WriteString("\n")
-		for _, pkg := range m.confirmInstallAUR {
-			sb.WriteString(fmt.Sprintf("  • %s\n", pkg))
-		}
-		sb.WriteString("\n")
+		label := lipgloss.NewStyle().Foreground(CurrentTheme.RepoAUR).Bold(true).Render("📥 Install (AUR):")
+		list := renderPkgList(m.confirmInstallAUR, bulletColorAUR)
+		sections = append(sections, label, list, "")
 	}
 
 	if len(m.confirmRemove) > 0 {
-		sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Red).Bold(true).Render("🗑️ Remove:"))
-		sb.WriteString("\n")
-		for _, pkg := range m.confirmRemove {
-			sb.WriteString(fmt.Sprintf("  • %s\n", pkg))
-		}
-		sb.WriteString("\n")
+		label := lipgloss.NewStyle().Foreground(CurrentTheme.Red).Bold(true).Render("🗑️ Remove:")
+		list := renderPkgList(m.confirmRemove, bulletColorRemove)
+		sections = append(sections, label, list, "")
 	}
 
-	if hasAUR {
-		warning := lipgloss.NewStyle().
+	// Divider
+	sections = append(sections, lipgloss.NewStyle().Foreground(CurrentTheme.Highlight).Render(strings.Repeat("─", 50)))
+
+	// Warning
+	if len(m.confirmInstallAUR) > 0 {
+		warningText := "⚠️  AUR warning: AUR packages are user-submitted. Make sure you trust\n   their PKGBUILDs before executing the installation."
+		warningStyled := lipgloss.NewStyle().
 			Foreground(CurrentTheme.Orange).
-			Bold(true).
-			Render("⚠️  Warning: AUR packages are user-submitted. Make sure you trust the PKGBUILDs.")
-		sb.WriteString(warning)
-		sb.WriteString("\n\n")
+			Render(warningText)
+		sections = append(sections, warningStyled, "")
 	}
 
-	prompt := lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Bold(true).Render("Proceed with execution? [y/N]")
-	sb.WriteString(prompt)
-	sb.WriteString("\n\n")
+	// Prompt
+	prompt := lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Bold(true).Render("Proceed with execution? [Y/n]")
+	sections = append(sections, prompt, "")
 
-	sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render("y/Enter: Confirm  •  n/Esc: Cancel  •  q: Quit"))
+	// Keybind guide
+	keybinds := lipgloss.NewStyle().
+		Foreground(CurrentTheme.Gray).
+		Render("y/Enter: Confirm  •  n/Esc: Cancel  •  q: Quit")
+	sections = append(sections, keybinds)
+
+	body := lipgloss.JoinVertical(lipgloss.Left, sections...)
 
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
 		lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(CurrentTheme.Yellow).
 			Padding(1, 4).
-			Render(sb.String()))
+			Render(body))
 }
 
