@@ -56,7 +56,26 @@ var httpClient = &http.Client{
 	Timeout: 15 * time.Second,
 }
 
+var (
+	searchCache     = make(map[string][]Package)
+	searchCacheMu   sync.RWMutex
+	detailsCache    = make(map[string]Package)
+	detailsCacheMu  sync.RWMutex
+	pkgbuildCache   = make(map[string]string)
+	pkgbuildCacheMu sync.RWMutex
+)
+
 func SearchContext(ctx context.Context, query string) ([]Package, error) {
+	searchCacheMu.RLock()
+	cached, found := searchCache[query]
+	searchCacheMu.RUnlock()
+	if found {
+		resultsCopy := make([]Package, len(cached))
+		copy(resultsCopy, cached)
+		checkInstalledStatus(resultsCopy)
+		return resultsCopy, nil
+	}
+
 	var results []Package
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -109,22 +128,75 @@ func SearchContext(ctx context.Context, query string) ([]Package, error) {
 	}
 
 	sortPackages(results, query)
+
+	searchCacheMu.Lock()
+	searchCache[query] = results
+	searchCacheMu.Unlock()
+
 	return results, nil
 }
 
 func GetPackageDetails(p *Package) error {
-	if p.IsAUR {
-		return getAURDetails(p)
+	detailsCacheMu.RLock()
+	cached, found := detailsCache[p.Name]
+	detailsCacheMu.RUnlock()
+	if found {
+		p.Architecture = cached.Architecture
+		p.Licenses = cached.Licenses
+		p.Groups = cached.Groups
+		p.Provides = cached.Provides
+		p.Depends = cached.Depends
+		p.OptDepends = cached.OptDepends
+		p.RequiredBy = cached.RequiredBy
+		p.Conflicts = cached.Conflicts
+		p.Replaces = cached.Replaces
+		p.Packager = cached.Packager
+		p.BuildDate = cached.BuildDate
+		p.InstallDate = cached.InstallDate
+		p.InstallReason = cached.InstallReason
+		p.ValidatedBy = cached.ValidatedBy
+		p.DownloadSize = cached.DownloadSize
+		p.InstalledSize = cached.InstalledSize
+		p.Popularity = cached.Popularity
+		p.FirstSubmitted = cached.FirstSubmitted
+		p.Keywords = cached.Keywords
+		p.MakeDepends = cached.MakeDepends
+		p.CheckDepends = cached.CheckDepends
+		p.Description = cached.Description
+		p.URL = cached.URL
+		p.Version = cached.Version
+		p.Maintainer = cached.Maintainer
+		p.Detailed = true
+		return nil
 	}
 
-	flag := "-Si"
-	if p.IsInstalled {
-		flag = "-Qi"
+	var err error
+	if p.IsAUR {
+		err = getAURDetails(p)
+	} else {
+		flag := "-Si"
+		if p.IsInstalled {
+			flag = "-Qi"
+		}
+		err = getPacmanDetails(p, flag)
 	}
-	return getPacmanDetails(p, flag)
+
+	if err == nil {
+		detailsCacheMu.Lock()
+		detailsCache[p.Name] = *p
+		detailsCacheMu.Unlock()
+	}
+	return err
 }
 
 func GetPKGBUILD(pkgName string) (string, error) {
+	pkgbuildCacheMu.RLock()
+	cached, found := pkgbuildCache[pkgName]
+	pkgbuildCacheMu.RUnlock()
+	if found {
+		return cached, nil
+	}
+
 	urlStr := fmt.Sprintf("https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=%s", url.QueryEscape(pkgName))
 	resp, err := httpClient.Get(urlStr)
 	if err != nil {
@@ -147,7 +219,13 @@ func GetPKGBUILD(pkgName string) (string, error) {
 			break
 		}
 	}
-	return sb.String(), nil
+
+	result := sb.String()
+	pkgbuildCacheMu.Lock()
+	pkgbuildCache[pkgName] = result
+	pkgbuildCacheMu.Unlock()
+
+	return result, nil
 }
 
 func getAURDetails(p *Package) error {
