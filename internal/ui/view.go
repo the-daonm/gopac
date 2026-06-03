@@ -16,6 +16,10 @@ func (m Model) View() string {
 		return m.helpView()
 	}
 
+	if m.showingConfirm {
+		return m.confirmView()
+	}
+
 	// Header
 	logo := HeaderStyle.Render(" GOPAC ")
 
@@ -198,3 +202,72 @@ func (m Model) helpView() string {
 			Padding(1, 4).
 			Render(sb.String()))
 }
+
+func (m Model) confirmView() string {
+	title := lipgloss.NewStyle().
+		Foreground(CurrentTheme.Base).
+		Background(CurrentTheme.Yellow).
+		Bold(true).
+		Padding(0, 2).
+		Render(" ACTION REQUIRED ")
+
+	var sb strings.Builder
+	sb.WriteByte('\n')
+	sb.WriteString(title)
+	sb.WriteString("\n\n")
+
+	sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Text).Bold(true).Render("The following actions will be executed:"))
+	sb.WriteString("\n\n")
+
+	hasAUR := len(m.confirmInstallAUR) > 0
+
+	if len(m.confirmInstallOfficial) > 0 {
+		sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.RepoOfficial).Bold(true).Render("📥 Install (Official):"))
+		sb.WriteString("\n")
+		for _, pkg := range m.confirmInstallOfficial {
+			sb.WriteString(fmt.Sprintf("  • %s\n", pkg))
+		}
+		sb.WriteString("\n")
+	}
+
+	if len(m.confirmInstallAUR) > 0 {
+		sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.RepoAUR).Bold(true).Render("📥 Install (AUR):"))
+		sb.WriteString("\n")
+		for _, pkg := range m.confirmInstallAUR {
+			sb.WriteString(fmt.Sprintf("  • %s\n", pkg))
+		}
+		sb.WriteString("\n")
+	}
+
+	if len(m.confirmRemove) > 0 {
+		sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Red).Bold(true).Render("🗑️ Remove:"))
+		sb.WriteString("\n")
+		for _, pkg := range m.confirmRemove {
+			sb.WriteString(fmt.Sprintf("  • %s\n", pkg))
+		}
+		sb.WriteString("\n")
+	}
+
+	if hasAUR {
+		warning := lipgloss.NewStyle().
+			Foreground(CurrentTheme.Orange).
+			Bold(true).
+			Render("⚠️  Warning: AUR packages are user-submitted. Make sure you trust the PKGBUILDs.")
+		sb.WriteString(warning)
+		sb.WriteString("\n\n")
+	}
+
+	prompt := lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Bold(true).Render("Proceed with execution? [y/N]")
+	sb.WriteString(prompt)
+	sb.WriteString("\n\n")
+
+	sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render("y/Enter: Confirm  •  n/Esc: Cancel  •  q: Quit"))
+
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
+		lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(CurrentTheme.Yellow).
+			Padding(1, 4).
+			Render(sb.String()))
+}
+

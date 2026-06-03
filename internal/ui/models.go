@@ -110,6 +110,11 @@ type Model struct {
 	lastSelectedPkg string
 	showingPKGBUILD bool
 	showingHelp     bool
+	showingConfirm         bool
+	confirmIsBulk          bool
+	confirmInstallOfficial []string
+	confirmInstallAUR      []string
+	confirmRemove          []string
 	focusSide       int // 0: List, 1: Detail, 2: Search
 	searchCancel    context.CancelFunc
 	searchHistory   []string
@@ -222,6 +227,58 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
+		}
+
+		if m.showingHelp {
+			switch msg.String() {
+			case "?", "esc":
+				m.showingHelp = false
+			case "q":
+				return m, tea.Quit
+			}
+			return m, nil
+		}
+
+		if m.showingConfirm {
+			switch msg.String() {
+			case "y", "Y", "enter":
+				m.showingConfirm = false
+				if len(m.confirmInstallOfficial) > 0 || len(m.confirmInstallAUR) > 0 || len(m.confirmRemove) > 0 {
+					c := manager.BulkActionCmd(m.confirmInstallOfficial, m.confirmInstallAUR, m.confirmRemove)
+					if c != nil {
+						if m.confirmIsBulk {
+							m.confirmInstallOfficial = nil
+							m.confirmInstallAUR = nil
+							m.confirmRemove = nil
+							return m, tea.ExecProcess(c, func(err error) tea.Msg { return bulkDoneMsg{} })
+						} else {
+							var singlePkg string
+							if len(m.confirmInstallOfficial) > 0 {
+								singlePkg = m.confirmInstallOfficial[0]
+							} else if len(m.confirmInstallAUR) > 0 {
+								singlePkg = m.confirmInstallAUR[0]
+							} else if len(m.confirmRemove) > 0 {
+								singlePkg = m.confirmRemove[0]
+							}
+							delete(m.markedInstall, singlePkg)
+							delete(m.markedRemove, singlePkg)
+
+							m.confirmInstallOfficial = nil
+							m.confirmInstallAUR = nil
+							m.confirmRemove = nil
+							return m, tea.ExecProcess(c, func(err error) tea.Msg { return refreshInstalledStatus() })
+						}
+					}
+				}
+			case "n", "N", "esc":
+				m.showingConfirm = false
+				m.confirmInstallOfficial = nil
+				m.confirmInstallAUR = nil
+				m.confirmRemove = nil
+			case "q":
+				return m, tea.Quit
+			}
+			return m, nil
 		}
 
 		// Cycle Focus: List(0) -> Detail(1) -> Search(2)
@@ -349,10 +406,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					toRemove = append(toRemove, name)
 				}
 
-				c := manager.BulkActionCmd(toInstallOfficial, toInstallAUR, toRemove)
-				if c != nil {
-					return m, tea.ExecProcess(c, func(err error) tea.Msg { return bulkDoneMsg{} })
-				}
+				m.confirmInstallOfficial = toInstallOfficial
+				m.confirmInstallAUR = toInstallAUR
+				m.confirmRemove = toRemove
+				m.confirmIsBulk = true
+				m.showingConfirm = true
 			}
 			return m, nil
 
@@ -389,8 +447,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateListItems()
 			case "enter":
 				if i, ok := m.list.SelectedItem().(Item); ok {
-					c := manager.InstallOrRemove(i.Pkg.Name, i.Pkg.IsAUR, i.Pkg.IsInstalled)
-					return m, tea.ExecProcess(c, func(err error) tea.Msg { return refreshInstalledStatus() })
+					m.confirmIsBulk = false
+					m.confirmRemove = nil
+					m.confirmInstallOfficial = nil
+					m.confirmInstallAUR = nil
+
+					if i.Pkg.IsInstalled {
+						m.confirmRemove = []string{i.Pkg.Name}
+					} else {
+						if i.Pkg.IsAUR {
+							m.confirmInstallAUR = []string{i.Pkg.Name}
+						} else {
+							m.confirmInstallOfficial = []string{i.Pkg.Name}
+						}
+					}
+					m.showingConfirm = true
+					return m, nil
 				}
 			case " ":
 				if i, ok := m.list.SelectedItem().(Item); ok {
