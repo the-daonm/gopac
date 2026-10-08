@@ -24,6 +24,11 @@
 - **Modern Aesthetics**: Cozy layouts with full theme customization (Gruvbox, OneDark, Dracula, Nord, Catppuccin).
 - **Detailed Package Info**: View maintainer, votes, version histories, and raw **PKGBUILD** files directly in the interface.
 - **Bulk & Safe Operations**: Queue multiple package installations or removals. Review detailed package plans and safety warnings before execution.
+- **Installed Packages at a Glance**: With an empty search, browse everything installed on your system.
+- **Updates Tab**: See pending repo and AUR upgrades (`old → new`) before running a full system upgrade.
+- **Orphans Tab**: Find dependencies nothing needs anymore and remove them all with `a` then `I`.
+- **AUR Health**: Out-of-date and unmaintained AUR packages are flagged in the list and details.
+- **Search History**: Recent searches are remembered across sessions (`↑`/`↓` in the search bar).
 - **Speed & Portability**: Built with Go and Charmbracelet's `bubbletea` for high performance and low dependencies.
 
 ---
@@ -54,13 +59,15 @@
 | `U` | Perform system upgrade (`pacman -Syu` / helper equivalent) | Global |
 | `I` | Process queued operations (Install/Remove modal) | Global |
 | `C` | Clear marked package queue | Global |
+| `r` | Refresh package data (installed, updates, search) | Global |
 | `p` | Toggle AUR PKGBUILD view | Global (for AUR packages) |
 | `j` / `↓` | Select next package | List Pane |
 | `k` / `↑` | Select previous package | List Pane |
-| `h` / `←` | Switch to previous tab | List Pane (ALL ➔ AUR ➔ OFFICIAL ➔ INSTALLED) |
+| `h` / `←` | Switch to previous tab | List Pane (ALL ➔ AUR ➔ OFFICIAL ➔ INSTALLED ➔ UPDATES ➔ ORPHANS) |
 | `l` / `→` | Switch to next tab | List Pane |
 | `space` | Mark package for installation/removal | List Pane |
-| `enter` | View/confirm operations for selected package | List Pane |
+| `a` | Mark/unmark all visible packages | List Pane |
+| `enter` | View/confirm operations for selected package (upgrade all in UPDATES) | List Pane |
 | `j` / `↓` | Scroll details down line-by-line | Details Pane |
 | `k` / `↑` | Scroll details up line-by-line | Details Pane |
 | `ctrl+d` | Page down details (10 lines) | Details Pane |
