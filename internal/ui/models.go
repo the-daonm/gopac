@@ -468,6 +468,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		case "r":
+			// Drop caches and reload everything from pacman and the AUR.
+			m.updatesLoaded = false
+			cmds = append(cmds, refreshInstalledStatus, m.loadUpdatesIfNeeded())
+			if m.currentQuery != "" {
+				if m.searchCancel != nil {
+					m.searchCancel()
+				}
+				ctx, cancel := context.WithCancel(context.Background())
+				m.searchCancel = cancel
+				m.isSearching = true
+				cmds = append(cmds, performSearch(ctx, m.currentQuery))
+			}
+			m.setStatus("Refreshing...", false)
+			return m, tea.Batch(cmds...)
+
 		case "C":
 			m.markedInstall = make(map[string]manager.Package)
 			m.markedRemove = make(map[string]manager.Package)
@@ -520,6 +536,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.showingConfirm = true
 					return m, nil
 				}
+			case "a":
+				if m.activeTab == updatesTab {
+					return m, nil
+				}
+				m.toggleQueueAll()
+				return m, nil
 			case " ":
 				if m.activeTab == updatesTab {
 					m.setStatus("Partial upgrades are unsupported on Arch; press Enter or U to upgrade everything", true)
@@ -731,6 +753,33 @@ func (m Model) tabAt(x int) int {
 		start += w
 	}
 	return -1
+}
+
+// toggleQueueAll queues every visible package (install or remove depending on
+// its state), or unqueues them all if they are already queued.
+func (m *Model) toggleQueueAll() {
+	visible := m.list.Items()
+	allQueued := len(visible) > 0
+	for _, li := range visible {
+		i := li.(Item)
+		if !i.MarkedInst && !i.MarkedRem {
+			allQueued = false
+			break
+		}
+	}
+	for _, li := range visible {
+		p := li.(Item).Pkg
+		switch {
+		case allQueued:
+			delete(m.markedInstall, p.Name)
+			delete(m.markedRemove, p.Name)
+		case p.IsInstalled:
+			m.markedRemove[p.Name] = p
+		default:
+			m.markedInstall[p.Name] = p
+		}
+	}
+	m.updateListItems()
 }
 
 // items returns pointers to every item the model holds, across data sets.

@@ -111,3 +111,23 @@ func TestUpdatesTabKeepsVersionsAfterDetails(t *testing.T) {
 		t.Errorf("unexpected update item after details: %+v", p)
 	}
 }
+
+func TestToggleQueueAll(t *testing.T) {
+	m := NewModel()
+	m.allItems = []Item{
+		{Pkg: manager.Package{Name: "a", IsInstalled: true, IsOrphan: true}},
+		{Pkg: manager.Package{Name: "b", IsInstalled: true, IsOrphan: true}},
+		{Pkg: manager.Package{Name: "c", IsInstalled: true}},
+	}
+	m.activeTab = 5 // ORPHANS
+	m.updateListItems()
+
+	m.toggleQueueAll()
+	if len(m.markedRemove) != 2 || len(m.markedInstall) != 0 {
+		t.Fatalf("expected both orphans queued for removal, got %v", m.markedRemove)
+	}
+	m.toggleQueueAll()
+	if len(m.markedRemove) != 0 {
+		t.Errorf("expected second toggle to clear the queue, got %v", m.markedRemove)
+	}
+}
