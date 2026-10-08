@@ -109,6 +109,14 @@ func (m Model) View() string {
 		helpText = "   DETAILS • j/k: Scroll • Esc: Back to List • Tab: Focus Search • ?: Help " + queueText
 	}
 
+	if m.statusMsg != "" {
+		color := CurrentTheme.Green
+		if m.statusIsErr {
+			color = CurrentTheme.Red
+		}
+		helpText = lipgloss.NewStyle().Foreground(color).Bold(true).Render(" "+m.statusMsg+" ") + "•" + helpText
+	}
+
 	statusBar := lipgloss.NewStyle().
 		Width(m.width).
 		Foreground(CurrentTheme.Gray).

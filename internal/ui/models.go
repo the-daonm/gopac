@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -84,8 +85,13 @@ type (
 	InstalledMapMsg  map[string]bool
 	PackageDetailMsg manager.Package
 	TickMsg          time.Time
-	bulkDoneMsg      struct{}
 )
+
+// execDoneMsg reports the result of an external pacman/helper command.
+type execDoneMsg struct {
+	bulk bool
+	err  error
+}
 
 type searchResultsMsg struct {
 	query string
@@ -122,6 +128,8 @@ type Model struct {
 	markedInstall          map[string]manager.Package
 	markedRemove           map[string]manager.Package
 	loadingDetailsFor      string
+	statusMsg              string
+	statusIsErr            bool
 }
 
 func NewModel() Model {
@@ -228,6 +236,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+		m.statusMsg = ""
 
 		if m.showingHelp {
 			switch msg.String() {
@@ -250,7 +259,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.confirmInstallOfficial = nil
 							m.confirmInstallAUR = nil
 							m.confirmRemove = nil
-							return m, tea.ExecProcess(c, func(err error) tea.Msg { return bulkDoneMsg{} })
+							return m, execCmd(c, true)
 						} else {
 							var singlePkg string
 							if len(m.confirmInstallOfficial) > 0 {
@@ -266,7 +275,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.confirmInstallOfficial = nil
 							m.confirmInstallAUR = nil
 							m.confirmRemove = nil
-							return m, tea.ExecProcess(c, func(err error) tea.Msg { return refreshInstalledStatus() })
+							return m, execCmd(c, false)
 						}
 					}
 				}
@@ -387,7 +396,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "U":
 			c := manager.UpdateSystem()
-			return m, tea.ExecProcess(c, func(err error) tea.Msg { return refreshInstalledStatus() })
+			return m, execCmd(c, false)
 
 		case "I":
 			if len(m.markedInstall) > 0 || len(m.markedRemove) > 0 {
@@ -533,7 +542,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.isSearching = false
-		if msg.err == nil {
+		if msg.err != nil {
+			m.setStatus("Search failed: "+msg.err.Error(), true)
+		} else {
 			items := make([]Item, len(msg.pkgs))
 			for i, pkg := range msg.pkgs {
 				items[i] = Item{Pkg: pkg, Query: msg.query}
@@ -562,9 +573,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.updateListItems()
 
-	case bulkDoneMsg:
-		m.markedInstall = make(map[string]manager.Package)
-		m.markedRemove = make(map[string]manager.Package)
+	case execDoneMsg:
+		if msg.err != nil {
+			// Keep the queue so the user can retry after fixing the problem.
+			m.setStatus("Command failed: "+msg.err.Error(), true)
+		} else {
+			if msg.bulk {
+				m.markedInstall = make(map[string]manager.Package)
+				m.markedRemove = make(map[string]manager.Package)
+			}
+			m.setStatus("Done", false)
+		}
 		return m, refreshInstalledStatus
 	}
 
@@ -629,6 +648,17 @@ func performSearch(ctx context.Context, query string) tea.Cmd {
 		res, err := manager.SearchContext(ctx, query)
 		return searchResultsMsg{query: query, pkgs: res, err: err}
 	}
+}
+
+func (m *Model) setStatus(msg string, isErr bool) {
+	m.statusMsg = msg
+	m.statusIsErr = isErr
+}
+
+func execCmd(c *exec.Cmd, bulk bool) tea.Cmd {
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return execDoneMsg{bulk: bulk, err: err}
+	})
 }
 
 func refreshInstalledStatus() tea.Msg {
