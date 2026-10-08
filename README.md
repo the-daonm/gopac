@@ -51,7 +51,7 @@
 
 | Key | Action | Context |
 | :--- | :--- | :--- |
-| `q` | Quit application | Global |
+| `ctrl+c` | Quit application | Global |
 | `?` | Toggle help overlay | Global |
 | `/` | Focus search bar | Global |
 | `tab` | Cycle focus (Search ➔ List ➔ Details) | Global |

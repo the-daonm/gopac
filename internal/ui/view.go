@@ -106,7 +106,7 @@ func (m Model) helpView() string {
 			{"U", "Upgrade the whole system"},
 			{"r", "Refresh package data"},
 			{"?", "Toggle this help"},
-			{"q  Ctrl+C", "Quit"},
+			{"Ctrl+C", "Quit"},
 		}},
 	}
 
@@ -214,7 +214,7 @@ func (m Model) confirmView() string {
 	// Keybind guide
 	keybinds := lipgloss.NewStyle().
 		Foreground(CurrentTheme.Gray).
-		Render("y/Enter: Confirm  •  n/Esc: Cancel  •  q: Quit")
+		Render("y/Enter: Confirm  •  n/Esc: Cancel  •  Ctrl+C: Quit")
 	sections = append(sections, keybinds)
 
 	body := lipgloss.JoinVertical(lipgloss.Left, sections...)

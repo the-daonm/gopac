@@ -161,3 +161,23 @@ func TestClickSelectsListItem(t *testing.T) {
 		t.Errorf("selected index = %d, want 2", got)
 	}
 }
+
+func TestQDoesNotQuit(t *testing.T) {
+	m := NewModel()
+	m.searching = false
+	m.focusSide = 0
+	for _, mode := range []string{"list", "help", "confirm"} {
+		m.showingHelp = mode == "help"
+		m.showingConfirm = mode == "confirm"
+		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+		if cmd != nil {
+			if _, quit := cmd().(tea.QuitMsg); quit {
+				t.Errorf("q quit the app in %s mode", mode)
+			}
+		}
+	}
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if _, quit := cmd().(tea.QuitMsg); !quit {
+		t.Errorf("ctrl+c should quit")
+	}
+}

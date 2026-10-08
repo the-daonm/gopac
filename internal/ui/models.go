@@ -303,8 +303,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "?", "esc":
 				m.showingHelp = false
-			case "q":
-				return m, tea.Quit
 			}
 			return m, nil
 		}
@@ -349,8 +347,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.confirmInstallOfficial = nil
 				m.confirmInstallAUR = nil
 				m.confirmRemove = nil
-			case "q":
-				return m, tea.Quit
 			}
 			return m, nil
 		}
@@ -455,9 +451,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.input.Focus()
 			m.historyIdx = len(m.searchHistory)
 			return m, textinput.Blink
-
-		case "q":
-			return m, tea.Quit
 
 		case "U":
 			c := manager.UpdateSystem()
