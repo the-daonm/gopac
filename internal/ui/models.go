@@ -213,35 +213,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseMsg:
-		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
+		switch {
+		case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft:
 			if msg.Y == 0 {
-				// Check if click was in the search bar area or tabs area
-				// Simple approximation: tabs are on the right
-				if msg.X > m.width-20 {
-					m.activeTab = (m.activeTab + 1) % len(tabs)
+				if t := m.tabAt(msg.X); t >= 0 {
+					m.activeTab = t
 					m.updateListItems()
-				} else if msg.X > m.listWidth && msg.X < m.width-20 {
+				} else if msg.X >= lipgloss.Width(HeaderStyle.Render(" GOPAC ")) {
 					m.focusSide = 2
 					m.searching = true
 					m.input.Focus()
 					m.historyIdx = len(m.searchHistory)
 				}
+			} else if msg.X < m.listWidth {
+				m.focusSide = 0
+				m.searching = false
+				m.input.Blur()
 			} else {
-				if msg.X < m.listWidth {
-					m.focusSide = 0
-					m.searching = false
-					m.input.Blur()
+				m.focusSide = 1
+				m.searching = false
+				m.input.Blur()
+			}
+		case msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown:
+			// Scroll whichever panel is under the pointer.
+			if msg.X < m.listWidth {
+				if msg.Button == tea.MouseButtonWheelUp {
+					m.list.CursorUp()
 				} else {
-					m.focusSide = 1
-					m.searching = false
-					m.input.Blur()
+					m.list.CursorDown()
 				}
+			} else {
+				m.viewport, cmd = m.viewport.Update(msg)
+				cmds = append(cmds, cmd)
 			}
 		}
-		m.list, cmd = m.list.Update(msg)
-		cmds = append(cmds, cmd)
-		m.viewport, cmd = m.viewport.Update(msg)
-		cmds = append(cmds, cmd)
 
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
@@ -641,6 +646,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent("")
 	}
 	return m, tea.Batch(cmds...)
+}
+
+// tabAt returns the index of the header tab at column x, or -1. Tabs are
+// right-aligned in the header and each is padded by one cell on both sides.
+func (m Model) tabAt(x int) int {
+	tabsWidth := 0
+	for _, t := range tabs {
+		tabsWidth += lipgloss.Width(t) + 2
+	}
+	start := m.width - tabsWidth
+	for i, t := range tabs {
+		w := lipgloss.Width(t) + 2
+		if x >= start && x < start+w {
+			return i
+		}
+		start += w
+	}
+	return -1
 }
 
 func (m *Model) updateListItems() {

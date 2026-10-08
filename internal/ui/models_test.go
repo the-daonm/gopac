@@ -2,12 +2,14 @@ package ui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"gopac/internal/manager"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestDetailsMsgOnlyUpdatesMatchingSource(t *testing.T) {
@@ -58,5 +60,32 @@ func TestViewFitsNarrowTerminal(t *testing.T) {
 
 	if h := lipgloss.Height(m.View()); h != 24 {
 		t.Errorf("view height = %d, want 24", h)
+	}
+}
+
+func TestTabAtMatchesRenderedHeader(t *testing.T) {
+	ApplyTheme("")
+	m := NewModel()
+	res, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = res.(Model)
+
+	header := ansi.Strip(strings.Split(m.View(), "\n")[0])
+	tabsText := " " + strings.Join(tabs, "  ") + " "
+	idx := strings.LastIndex(header, tabsText)
+	if idx < 0 {
+		t.Fatalf("tabs not found in header %q", header)
+	}
+	col := ansi.StringWidth(header[:idx])
+	for i, name := range tabs {
+		// Check both the first and last cell of each padded tab.
+		for _, x := range []int{col, col + len(name) + 1} {
+			if got := m.tabAt(x); got != i {
+				t.Errorf("tabAt(%d) = %d, want %d (%s)", x, got, i, name)
+			}
+		}
+		col += len(name) + 2
+	}
+	if got := m.tabAt(0); got != -1 {
+		t.Errorf("tabAt(0) = %d, want -1", got)
 	}
 }
