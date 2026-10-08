@@ -25,6 +25,7 @@ type Item struct {
 	Query      string
 	MarkedInst bool
 	MarkedRem  bool
+	DetailErr  string
 }
 
 func (i Item) Title() string {
@@ -83,10 +84,19 @@ func (i Item) Description() string {
 func (i Item) FilterValue() string { return i.Pkg.Name }
 
 type (
-	InstalledMapMsg  map[string]bool
-	PackageDetailMsg manager.Package
-	TickMsg          time.Time
+	InstalledMapMsg map[string]bool
+	TickMsg         time.Time
 )
+
+type detailsMsg struct {
+	pkg manager.Package
+	err error
+}
+
+type pkgbuildMsg struct {
+	name    string
+	content string
+}
 
 // execDoneMsg reports the result of an external pacman/helper command.
 type execDoneMsg struct {
@@ -440,7 +450,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.showingPKGBUILD {
 					m.viewport.SetContent(renderPKGBUILD(i.Pkg, m.viewport.Width))
 				} else {
-					m.viewport.SetContent(renderDescription(i.Pkg, m.viewport.Width))
+					m.viewport.SetContent(renderDescription(i, m.viewport.Width))
 				}
 				return m, fetchCmd
 			}
@@ -559,17 +569,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.allItems[i].Pkg.IsInstalled = msg[m.allItems[i].Pkg.Name]
 			// Versions and install metadata may have changed; refetch lazily.
 			m.allItems[i].Pkg.Detailed = false
+			m.allItems[i].DetailErr = ""
 		}
 		m.loadingDetailsFor = ""
 		m.updateListItems()
 
-	case PackageDetailMsg:
-		if msg.Name == m.loadingDetailsFor {
+	case detailsMsg:
+		if msg.pkg.Name == m.loadingDetailsFor {
 			m.loadingDetailsFor = ""
 		}
 		for i := range m.allItems {
-			if m.allItems[i].Pkg.Name == msg.Name {
-				m.allItems[i].Pkg = manager.Package(msg)
+			it := &m.allItems[i]
+			// The same name can exist both in the repos and in the AUR.
+			if it.Pkg.Name != msg.pkg.Name || it.Pkg.IsAUR != msg.pkg.IsAUR {
+				continue
+			}
+			if msg.err != nil {
+				it.DetailErr = msg.err.Error()
+				continue
+			}
+			// Keep state that may have changed while the fetch was running.
+			pkg := msg.pkg
+			pkg.IsInstalled = it.Pkg.IsInstalled
+			pkg.PKGBUILD = it.Pkg.PKGBUILD
+			it.Pkg = pkg
+			it.DetailErr = ""
+		}
+		m.updateListItems()
+
+	case pkgbuildMsg:
+		for i := range m.allItems {
+			if m.allItems[i].Pkg.Name == msg.name && m.allItems[i].Pkg.IsAUR {
+				m.allItems[i].Pkg.PKGBUILD = msg.content
 			}
 		}
 		m.updateListItems()
@@ -599,10 +630,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.showingPKGBUILD {
 			m.viewport.SetContent(renderPKGBUILD(i.Pkg, m.viewport.Width))
 		} else {
-			m.viewport.SetContent(renderDescription(i.Pkg, m.viewport.Width))
+			m.viewport.SetContent(renderDescription(i, m.viewport.Width))
 		}
 
-		if !i.Pkg.Detailed && m.loadingDetailsFor != i.Pkg.Name {
+		if !i.Pkg.Detailed && i.DetailErr == "" && m.loadingDetailsFor != i.Pkg.Name {
 			m.loadingDetailsFor = i.Pkg.Name
 			cmds = append(cmds, fetchDetails(i.Pkg))
 		}
@@ -668,13 +699,18 @@ func refreshInstalledStatus() tea.Msg {
 	return InstalledMapMsg(manager.GetInstalledCache())
 }
 
-func renderDescription(p manager.Package, width int) string {
+func renderDescription(item Item, width int) string {
+	p := item.Pkg
 	if !p.Detailed {
 		header := lipgloss.NewStyle().Foreground(CurrentTheme.RepoOfficial).Bold(true).Render(p.Name)
 		if p.IsAUR {
 			header = lipgloss.NewStyle().Foreground(CurrentTheme.RepoAUR).Bold(true).Render(p.Name)
 		}
-		return lipgloss.NewStyle().Width(width).Render(fmt.Sprintf("\n%s\n\nLoading details...", header))
+		body := "Loading details..."
+		if item.DetailErr != "" {
+			body = lipgloss.NewStyle().Foreground(CurrentTheme.Red).Render("Failed to load details: " + item.DetailErr)
+		}
+		return lipgloss.NewStyle().Width(width).Render(fmt.Sprintf("\n%s\n\n%s", header, body))
 	}
 
 	var sb strings.Builder
@@ -799,10 +835,8 @@ func renderPKGBUILD(p manager.Package, width int) string {
 
 func fetchDetails(p manager.Package) tea.Cmd {
 	return func() tea.Msg {
-		if err := manager.GetPackageDetails(&p); err != nil {
-			return nil
-		}
-		return PackageDetailMsg(p)
+		err := manager.GetPackageDetails(&p)
+		return detailsMsg{pkg: p, err: err}
 	}
 }
 
@@ -810,10 +844,8 @@ func fetchPKGBUILD(p manager.Package) tea.Cmd {
 	return func() tea.Msg {
 		build, err := manager.GetPKGBUILD(p.Name)
 		if err != nil {
-			p.PKGBUILD = fmt.Sprintf("Error fetching PKGBUILD: %v", err)
-		} else {
-			p.PKGBUILD = build
+			build = fmt.Sprintf("Error fetching PKGBUILD: %v", err)
 		}
-		return PackageDetailMsg(p)
+		return pkgbuildMsg{name: p.Name, content: build}
 	}
 }
