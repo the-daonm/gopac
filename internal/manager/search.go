@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
 	"net/http"
 	"net/url"
@@ -211,19 +212,12 @@ func GetPKGBUILD(pkgName string) (string, error) {
 		return "", fmt.Errorf("failed to fetch PKGBUILD: %s", resp.Status)
 	}
 
-	var sb strings.Builder
-	buf := make([]byte, 1024)
-	for {
-		n, err := resp.Body.Read(buf)
-		if n > 0 {
-			sb.Write(buf[:n])
-		}
-		if err != nil {
-			break
-		}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
 	}
 
-	result := sb.String()
+	result := string(body)
 	pkgbuildCacheMu.Lock()
 	pkgbuildCache[pkgName] = result
 	pkgbuildCacheMu.Unlock()
@@ -238,6 +232,10 @@ func getAURDetails(p *Package) error {
 		return err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("AUR request failed: %s", resp.Status)
+	}
 
 	type aurInfo struct {
 		Name           string   `json:"Name"`
@@ -260,12 +258,16 @@ func getAURDetails(p *Package) error {
 		Version        string   `json:"Version"`
 	}
 	type response struct {
+		Error   string    `json:"error"`
 		Results []aurInfo `json:"results"`
 	}
 
 	var data response
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return err
+	}
+	if data.Error != "" {
+		return fmt.Errorf("AUR: %s", data.Error)
 	}
 
 	if len(data.Results) == 0 {
@@ -452,6 +454,10 @@ func searchAURContext(ctx context.Context, query string) ([]Package, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("AUR request failed: %s", resp.Status)
+	}
+
 	type aurResult struct {
 		Name         string `json:"Name"`
 		Version      string `json:"Version"`
@@ -462,12 +468,16 @@ func searchAURContext(ctx context.Context, query string) ([]Package, error) {
 		LastModified int64  `json:"LastModified"`
 	}
 	type response struct {
+		Error   string      `json:"error"`
 		Results []aurResult `json:"results"`
 	}
 
 	var data response
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return nil, err
+	}
+	if data.Error != "" {
+		return nil, fmt.Errorf("AUR: %s", data.Error)
 	}
 
 	var pkgs []Package
