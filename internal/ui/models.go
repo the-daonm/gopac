@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"gopac/internal/history"
 	"gopac/internal/manager"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -195,7 +196,7 @@ func NewModel() Model {
 	ti.Focus()
 	return Model{
 		list: l, input: ti, viewport: viewport.New(0, 0), spinner: s, searching: true, allItems: []Item{}, activeTab: 0, focusSide: 2,
-		searchHistory: []string{}, historyIdx: -1,
+		searchHistory: history.Load(), historyIdx: -1,
 		markedInstall:     make(map[string]manager.Package),
 		markedRemove:      make(map[string]manager.Package),
 		loadingDetailsFor: "",
@@ -388,6 +389,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Add to history if not same as last
 					if len(m.searchHistory) == 0 || m.searchHistory[len(m.searchHistory)-1] != m.input.Value() {
 						m.searchHistory = append(m.searchHistory, m.input.Value())
+						cmds = append(cmds, saveHistory(m.searchHistory))
 					}
 					m.historyIdx = len(m.searchHistory)
 				}
@@ -395,7 +397,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				ctx, cancel := context.WithCancel(context.Background())
 				m.searchCancel = cancel
 				m.isSearching = true
-				return m, performSearch(ctx, m.currentQuery)
+				cmds = append(cmds, performSearch(ctx, m.currentQuery))
+				return m, tea.Batch(cmds...)
 			}
 			if msg.String() == "esc" {
 				m.searching = false
@@ -896,6 +899,14 @@ func execCmd(c *exec.Cmd, bulk bool) tea.Cmd {
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return execDoneMsg{bulk: bulk, err: err}
 	})
+}
+
+func saveHistory(entries []string) tea.Cmd {
+	entries = append([]string(nil), entries...)
+	return func() tea.Msg {
+		_ = history.Save(entries) // best effort; history is a convenience
+		return nil
+	}
 }
 
 func loadInstalled() tea.Msg {
