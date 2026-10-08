@@ -150,37 +150,37 @@ func SearchContext(ctx context.Context, query string) ([]Package, error) {
 }
 
 func GetPackageDetails(p *Package) error {
+	// pacman -Si and -Qi report different data, so cache them separately.
+	key := "sync/" + p.Name
+	if p.IsAUR {
+		key = "aur/" + p.Name
+	} else if p.IsInstalled {
+		key = "local/" + p.Name
+	}
+
 	detailsCacheMu.RLock()
-	cached, found := detailsCache[p.Name]
+	cached, found := detailsCache[key]
 	detailsCacheMu.RUnlock()
 	if found {
-		p.Architecture = cached.Architecture
-		p.Licenses = cached.Licenses
-		p.Groups = cached.Groups
-		p.Provides = cached.Provides
-		p.Depends = cached.Depends
-		p.OptDepends = cached.OptDepends
-		p.RequiredBy = cached.RequiredBy
-		p.Conflicts = cached.Conflicts
-		p.Replaces = cached.Replaces
-		p.Packager = cached.Packager
-		p.BuildDate = cached.BuildDate
-		p.InstallDate = cached.InstallDate
-		p.InstallReason = cached.InstallReason
-		p.ValidatedBy = cached.ValidatedBy
-		p.DownloadSize = cached.DownloadSize
-		p.InstalledSize = cached.InstalledSize
-		p.Popularity = cached.Popularity
-		p.FirstSubmitted = cached.FirstSubmitted
-		p.Keywords = cached.Keywords
-		p.MakeDepends = cached.MakeDepends
-		p.CheckDepends = cached.CheckDepends
-		p.Description = cached.Description
-		p.URL = cached.URL
-		p.Version = cached.Version
-		p.Maintainer = cached.Maintainer
-		p.Detailed = true
+		installed, pkgbuild := p.IsInstalled, p.PKGBUILD
+		*p = cached
+		p.IsInstalled, p.PKGBUILD = installed, pkgbuild
 		return nil
+	}
+
+	// Start from the search summary only, so a refetch does not append to
+	// detail lists left over from a previous fetch.
+	*p = Package{
+		Name:         p.Name,
+		Version:      p.Version,
+		Description:  p.Description,
+		IsAUR:        p.IsAUR,
+		IsInstalled:  p.IsInstalled,
+		Votes:        p.Votes,
+		URL:          p.URL,
+		Maintainer:   p.Maintainer,
+		LastModified: p.LastModified,
+		PKGBUILD:     p.PKGBUILD,
 	}
 
 	var err error
@@ -196,7 +196,7 @@ func GetPackageDetails(p *Package) error {
 
 	if err == nil {
 		detailsCacheMu.Lock()
-		detailsCache[p.Name] = *p
+		detailsCache[key] = *p
 		detailsCacheMu.Unlock()
 	}
 	return err
