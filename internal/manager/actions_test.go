@@ -123,3 +123,19 @@ func TestBulkActionCmd(t *testing.T) {
 		}
 	}
 }
+
+func TestShellQuote(t *testing.T) {
+	cases := map[string]string{
+		"vim":            "vim",
+		"lib32-gcc-libs": "lib32-gcc-libs",
+		"gtk+":           "gtk+",
+		"foo;rm -rf ~":   "'foo;rm -rf ~'",
+		"it's":           `'it'\''s'`,
+		"":               "''",
+	}
+	for in, want := range cases {
+		if got := shellQuote(in); got != want {
+			t.Errorf("shellQuote(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
