@@ -256,6 +256,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusSide = 0
 				m.searching = false
 				m.input.Blur()
+				if idx, ok := m.listIndexAt(msg.Y); ok {
+					m.list.Select(idx)
+				}
 			} else {
 				m.focusSide = 1
 				m.searching = false
@@ -753,6 +756,21 @@ func (m Model) tabAt(x int) int {
 		start += w
 	}
 	return -1
+}
+
+// listIndexAt maps a screen row to the index of the list item drawn there.
+// The list starts below the header and the panel's top border; the default
+// delegate draws each item as two lines followed by one spacer line.
+func (m Model) listIndexAt(y int) (int, bool) {
+	const listTop, rowsPerItem = 2, 3
+	if y < listTop || (y-listTop)%rowsPerItem == rowsPerItem-1 {
+		return 0, false
+	}
+	idx := m.list.Paginator.Page*m.list.Paginator.PerPage + (y-listTop)/rowsPerItem
+	if idx >= len(m.list.Items()) || (y-listTop)/rowsPerItem >= m.list.Paginator.PerPage {
+		return 0, false
+	}
+	return idx, true
 }
 
 // toggleQueueAll queues every visible package (install or remove depending on

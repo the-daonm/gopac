@@ -131,3 +131,33 @@ func TestToggleQueueAll(t *testing.T) {
 		t.Errorf("expected second toggle to clear the queue, got %v", m.markedRemove)
 	}
 }
+
+func TestClickSelectsListItem(t *testing.T) {
+	ApplyTheme("")
+	m := NewModel()
+	res, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = res.(Model)
+	m.allItems = []Item{
+		{Pkg: manager.Package{Name: "alpha", Detailed: true}},
+		{Pkg: manager.Package{Name: "bravo", Detailed: true}},
+		{Pkg: manager.Package{Name: "charlie", Detailed: true}},
+	}
+	m.updateListItems()
+
+	// Find the row where "charlie" is drawn and click it.
+	row := -1
+	for y, line := range strings.Split(ansi.Strip(m.View()), "\n") {
+		if strings.Contains(line, "charlie") {
+			row = y
+			break
+		}
+	}
+	if row < 0 {
+		t.Fatal("charlie not rendered")
+	}
+	res, _ = m.Update(tea.MouseMsg{X: 5, Y: row, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	m = res.(Model)
+	if got := m.list.Index(); got != 2 {
+		t.Errorf("selected index = %d, want 2", got)
+	}
+}
