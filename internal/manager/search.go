@@ -314,7 +314,13 @@ func getPacmanDetails(p *Package, flag string) error {
 		return err
 	}
 
-	lines := strings.Split(string(out), "\n")
+	parsePacmanInfo(string(out), p)
+	return nil
+}
+
+// parsePacmanInfo fills p from one package block of `pacman -Si/-Qi` output.
+func parsePacmanInfo(out string, p *Package) {
+	lines := strings.Split(out, "\n")
 	var lastKey string
 	for _, line := range lines {
 		if strings.TrimSpace(line) == "" {
@@ -415,10 +421,15 @@ func getPacmanDetails(p *Package, flag string) error {
 			p.InstallReason = val
 		case "Validated By":
 			p.ValidatedBy = val
+		case "Name":
+			p.Name = val
+		case "Version":
+			p.Version = val
+		case "Description":
+			p.Description = val
 		}
 	}
 	p.Detailed = true
-	return nil
 }
 
 func sortPackages(pkgs []Package, query string) {
