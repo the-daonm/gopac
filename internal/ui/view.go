@@ -21,78 +21,7 @@ func (m Model) View() string {
 		return m.confirmView()
 	}
 
-	// Header
-	logo := HeaderStyle.Render(" GOPAC ")
-
-	// Render Tabs
-	var tabViews []string
-	for i, t := range tabs {
-		style := lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Padding(0, 1)
-		if i == m.activeTab {
-			style = lipgloss.NewStyle().
-				Foreground(CurrentTheme.Base).
-				Background(CurrentTheme.Focus).
-				Bold(true).
-				Padding(0, 1)
-		}
-		tabViews = append(tabViews, style.Render(t))
-	}
-	tabsView := lipgloss.JoinHorizontal(lipgloss.Top, tabViews...)
-
-	// Search Styling
-	var searchBorderColor lipgloss.Color
-	if m.searching {
-		searchBorderColor = CurrentTheme.Focus
-	} else {
-		searchBorderColor = CurrentTheme.Gray
-	}
-	searchIcon := " "
-
-	gap := lipgloss.NewStyle().Background(CurrentTheme.Highlight).Render("   ")
-	gapWidth := lipgloss.Width(gap)
-
-	fixedContentWidth := lipgloss.Width(logo) + lipgloss.Width(tabsView) + (gapWidth * 2)
-	availableSearchWidth := max(m.width-fixedContentWidth, 10)
-
-	spin := "  "
-	if m.isSearching {
-		spin = m.spinner.View() + " "
-	}
-
-	// Calculate input width dynamically inside the pill shape
-	middleWidth := availableSearchWidth - 2 // 2 for the rounded corners  and 
-	inputWidth := middleWidth - 4
-	if inputWidth < 5 {
-		inputWidth = 5
-	}
-	m.input.Width = inputWidth
-	middleWidth = inputWidth + 4
-
-	// Build the pill-shaped search input box
-	leftPill := lipgloss.NewStyle().Foreground(CurrentTheme.Base).Background(CurrentTheme.Highlight).Render("")
-	rightPill := lipgloss.NewStyle().Foreground(CurrentTheme.Base).Background(CurrentTheme.Highlight).Render("")
-
-	searchContent := lipgloss.NewStyle().
-		Background(CurrentTheme.Base).
-		Foreground(searchBorderColor).
-		Width(middleWidth).
-		Render(spin + searchIcon + m.input.View())
-
-	searchView := leftPill + searchContent + rightPill
-
-	// Join Header Elements
-	header := lipgloss.JoinHorizontal(lipgloss.Top,
-		logo,
-		gap,
-		searchView,
-		gap,
-		tabsView,
-	)
-
-	header = lipgloss.NewStyle().
-		Width(m.width).
-		Background(CurrentTheme.Highlight).
-		Render(header)
+	header := m.headerView()
 
 	totalQueued := len(m.markedInstall) + len(m.markedRemove)
 	queueText := ""
@@ -324,4 +253,62 @@ func (m Model) confirmView() string {
 			BorderForeground(CurrentTheme.Yellow).
 			Padding(1, 4).
 			Render(body))
+}
+
+// tabLabel is the text shown for tab i in the header.
+func (m Model) tabLabel(i int) string {
+	return tabs[i]
+}
+
+func (m Model) tabsView() string {
+	var views []string
+	for i := range tabs {
+		style := lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Background(CurrentTheme.Highlight).Padding(0, 1)
+		if i == m.activeTab {
+			style = style.Foreground(CurrentTheme.Base).Background(CurrentTheme.Focus).Bold(true)
+		}
+		views = append(views, style.Render(m.tabLabel(i)))
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, views...)
+}
+
+// headerView renders the logo, search pill and tabs on exactly one line of
+// m.width cells, so mouse hit-testing can rely on the layout.
+func (m Model) headerView() string {
+	bg := lipgloss.NewStyle().Background(CurrentTheme.Highlight)
+	logo := HeaderStyle.Render(" GOPAC ")
+	tabsView := m.tabsView()
+	gap := bg.Render(" ")
+
+	searchWidth := m.width - lipgloss.Width(logo) - lipgloss.Width(tabsView) - 2*lipgloss.Width(gap)
+	if searchWidth < 12 {
+		// Not enough room for the tabs; the active tab is still shown in the status bar.
+		tabsView = ""
+		searchWidth = m.width - lipgloss.Width(logo) - lipgloss.Width(gap)
+	}
+
+	fg := CurrentTheme.Gray
+	if m.searching {
+		fg = CurrentTheme.Focus
+	}
+	spin := "  "
+	if m.isSearching {
+		spin = m.spinner.View() + " "
+	}
+
+	// Rounded pill caps take one cell each; the rest is the input field.
+	inner := max(searchWidth-2, 0)
+	input := m.input
+	input.Width = max(inner-5, 1) // spinner (2) + icon (2) + cursor (1)
+	content := ansi.Truncate(spin+"\uf002 "+input.View(), inner, "")
+	pillCap := lipgloss.NewStyle().Foreground(CurrentTheme.Base).Background(CurrentTheme.Highlight)
+	search := pillCap.Render("\ue0b6") +
+		lipgloss.NewStyle().Background(CurrentTheme.Base).Foreground(fg).Width(inner).Render(content) +
+		pillCap.Render("\ue0b4")
+
+	header := logo + gap + search
+	if tabsView != "" {
+		header += gap + tabsView
+	}
+	return bg.Width(m.width).Render(ansi.Truncate(header, m.width, ""))
 }

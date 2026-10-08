@@ -675,15 +675,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // tabAt returns the index of the header tab at column x, or -1. Tabs are
-// right-aligned in the header and each is padded by one cell on both sides.
+// right-aligned in the header (see headerView).
 func (m Model) tabAt(x int) int {
-	tabsWidth := 0
-	for _, t := range tabs {
-		tabsWidth += lipgloss.Width(t) + 2
-	}
+	tabsWidth := lipgloss.Width(m.tabsView())
 	start := m.width - tabsWidth
-	for i, t := range tabs {
-		w := lipgloss.Width(t) + 2
+	for i := range tabs {
+		w := lipgloss.Width(m.tabLabel(i)) + 2
 		if x >= start && x < start+w {
 			return i
 		}
