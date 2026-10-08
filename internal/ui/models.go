@@ -80,10 +80,14 @@ func (i Item) Description() string {
 	if i.Pkg.IsAUR {
 		tag = aurTag
 	}
+	desc := fmt.Sprintf("%s | %s", tag, i.Pkg.Version)
 	if i.Pkg.OldVersion != "" {
-		return fmt.Sprintf("%s | %s → %s", tag, i.Pkg.OldVersion, i.Pkg.Version)
+		desc = fmt.Sprintf("%s | %s → %s", tag, i.Pkg.OldVersion, i.Pkg.Version)
 	}
-	return fmt.Sprintf("%s | %s", tag, i.Pkg.Version)
+	if i.Pkg.OutOfDate > 0 {
+		desc += " | " + lipgloss.NewStyle().Foreground(CurrentTheme.Red).Render("out of date")
+	}
+	return desc
 }
 
 func (i Item) FilterValue() string { return i.Pkg.Name }
@@ -886,6 +890,10 @@ func renderDescription(item Item, width int) string {
 		}
 		if p.LastModified > 0 {
 			row("Last Modified", time.Unix(p.LastModified, 0).Format("2006-01-02"))
+		}
+		if p.OutOfDate > 0 {
+			fmt.Fprintf(&sb, "%s : %s\n", keyStyle.Render("Out of Date"),
+				lipgloss.NewStyle().Foreground(CurrentTheme.Red).Render("flagged on "+time.Unix(p.OutOfDate, 0).Format("2006-01-02")))
 		}
 
 		if len(p.Depends) > 0 {

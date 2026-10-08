@@ -30,6 +30,7 @@ type Package struct {
 	URL          string
 	Maintainer   string
 	LastModified int64
+	OutOfDate    int64 // AUR: when the package was flagged out of date, 0 if not
 
 	Detailed       bool
 	Architecture   string
@@ -182,6 +183,7 @@ func GetPackageDetails(p *Package) error {
 		URL:          p.URL,
 		Maintainer:   p.Maintainer,
 		LastModified: p.LastModified,
+		OutOfDate:    p.OutOfDate,
 		PKGBUILD:     p.PKGBUILD,
 	}
 
@@ -263,6 +265,7 @@ func getAURDetails(p *Package) error {
 		Popularity     float64  `json:"Popularity"`
 		FirstSubmitted int64    `json:"FirstSubmitted"`
 		LastModified   int64    `json:"LastModified"`
+		OutOfDate      int64    `json:"OutOfDate"`
 		Maintainer     string   `json:"Maintainer"`
 		URL            string   `json:"URL"`
 		Description    string   `json:"Description"`
@@ -299,6 +302,7 @@ func getAURDetails(p *Package) error {
 	p.Popularity = info.Popularity
 	p.FirstSubmitted = info.FirstSubmitted
 	p.LastModified = info.LastModified
+	p.OutOfDate = info.OutOfDate
 	p.Maintainer = info.Maintainer
 	p.URL = info.URL
 	p.Description = info.Description
@@ -488,6 +492,7 @@ func searchAURContext(ctx context.Context, query string) ([]Package, error) {
 		URL          string `json:"URL"`
 		Maintainer   string `json:"Maintainer"`
 		LastModified int64  `json:"LastModified"`
+		OutOfDate    int64  `json:"OutOfDate"`
 	}
 	type response struct {
 		Error   string      `json:"error"`
@@ -513,6 +518,7 @@ func searchAURContext(ctx context.Context, query string) ([]Package, error) {
 			URL:          r.URL,
 			Maintainer:   r.Maintainer,
 			LastModified: r.LastModified,
+			OutOfDate:    r.OutOfDate,
 		})
 	}
 	return pkgs, nil
