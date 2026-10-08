@@ -104,6 +104,11 @@ type execDoneMsg struct {
 	err  error
 }
 
+type installedListMsg struct {
+	pkgs []manager.Package
+	err  error
+}
+
 type searchResultsMsg struct {
 	query string
 	pkgs  []manager.Package
@@ -182,7 +187,9 @@ func tickCmd() tea.Cmd {
 	})
 }
 
-func (m Model) Init() tea.Cmd { return tea.Batch(textinput.Blink, tickCmd(), m.spinner.Tick) }
+func (m Model) Init() tea.Cmd {
+	return tea.Batch(textinput.Blink, tickCmd(), m.spinner.Tick, loadInstalled)
+}
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -350,10 +357,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				if m.currentQuery == "" {
-					m.allItems = []Item{}
-					m.updateListItems()
 					m.isSearching = false
-					return m, nil
+					return m, loadInstalled
 				}
 
 				if m.input.Value() != "" {
@@ -544,9 +549,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.searchCancel = nil
 				}
 				if m.currentQuery == "" {
-					m.allItems = []Item{}
-					m.updateListItems()
 					m.isSearching = false
+					cmds = append(cmds, loadInstalled)
 				} else {
 					ctx, cancel := context.WithCancel(context.Background())
 					m.searchCancel = cancel
@@ -581,6 +585,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.allItems[i].DetailErr = ""
 		}
 		m.loadingDetailsFor = ""
+		m.updateListItems()
+		if m.currentQuery == "" {
+			cmds = append(cmds, loadInstalled)
+		}
+
+	case installedListMsg:
+		if m.currentQuery != "" {
+			// The user started searching meanwhile.
+			return m, nil
+		}
+		if msg.err != nil {
+			m.setStatus("Failed to list installed packages: "+msg.err.Error(), true)
+		}
+		items := make([]Item, len(msg.pkgs))
+		for i, pkg := range msg.pkgs {
+			items[i] = Item{Pkg: pkg}
+		}
+		m.allItems = items
 		m.updateListItems()
 
 	case detailsMsg:
@@ -718,6 +740,11 @@ func execCmd(c *exec.Cmd, bulk bool) tea.Cmd {
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return execDoneMsg{bulk: bulk, err: err}
 	})
+}
+
+func loadInstalled() tea.Msg {
+	pkgs, err := manager.ListInstalled()
+	return installedListMsg{pkgs: pkgs, err: err}
 }
 
 func refreshInstalledStatus() tea.Msg {
