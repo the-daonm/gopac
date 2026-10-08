@@ -35,6 +35,11 @@ func detectAURHelper() string {
 	return "pacman"
 }
 
+// HasAURHelper reports whether an AUR helper is configured or installed.
+func HasAURHelper() bool {
+	return detectAURHelper() != "pacman"
+}
+
 func UpdateSystem() *exec.Cmd {
 	helper := detectAURHelper()
 

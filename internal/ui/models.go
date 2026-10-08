@@ -268,6 +268,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "y", "Y", "enter":
 				m.showingConfirm = false
+				if len(m.confirmInstallAUR) > 0 && !manager.HasAURHelper() {
+					m.setStatus("No AUR helper found: install paru or yay, or set aur_helper in the config", true)
+					return m, nil
+				}
 				if len(m.confirmInstallOfficial) > 0 || len(m.confirmInstallAUR) > 0 || len(m.confirmRemove) > 0 {
 					c := manager.BulkActionCmd(m.confirmInstallOfficial, m.confirmInstallAUR, m.confirmRemove)
 					if c != nil {
