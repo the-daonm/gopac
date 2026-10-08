@@ -89,3 +89,25 @@ func TestTabAtMatchesRenderedHeader(t *testing.T) {
 		t.Errorf("tabAt(0) = %d, want -1", got)
 	}
 }
+
+func TestUpdatesTabKeepsVersionsAfterDetails(t *testing.T) {
+	m := NewModel()
+	res, _ := m.Update(updatesMsg{pkgs: []manager.Package{
+		{Name: "clang", OldVersion: "22.1-1", Version: "23.1-1", IsInstalled: true},
+	}})
+	m = res.(Model)
+	m.activeTab = updatesTab
+	m.updatesLoaded = true
+	m.updateListItems()
+
+	if n := len(m.list.Items()); n != 1 {
+		t.Fatalf("expected 1 update in list, got %d", n)
+	}
+
+	// -Qi reports the installed version.
+	res, _ = m.Update(detailsMsg{pkg: manager.Package{Name: "clang", Version: "22.1-1", Detailed: true}})
+	m = res.(Model)
+	if p := m.updates[0].Pkg; p.Version != "23.1-1" || p.OldVersion != "22.1-1" || !p.Detailed {
+		t.Errorf("unexpected update item after details: %+v", p)
+	}
+}

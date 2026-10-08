@@ -18,7 +18,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var tabs = []string{"ALL", "AUR", "OFFICIAL", "INSTALLED", "ORPHANS"}
+var tabs = []string{"ALL", "AUR", "OFFICIAL", "INSTALLED", "UPDATES", "ORPHANS"}
+
+const updatesTab = 4
 
 type Item struct {
 	Pkg        manager.Package
@@ -78,6 +80,9 @@ func (i Item) Description() string {
 	if i.Pkg.IsAUR {
 		tag = aurTag
 	}
+	if i.Pkg.OldVersion != "" {
+		return fmt.Sprintf("%s | %s → %s", tag, i.Pkg.OldVersion, i.Pkg.Version)
+	}
 	return fmt.Sprintf("%s | %s", tag, i.Pkg.Version)
 }
 
@@ -105,6 +110,11 @@ type pkgbuildMsg struct {
 // execDoneMsg reports the result of an external pacman/helper command.
 type execDoneMsg struct {
 	bulk bool
+	err  error
+}
+
+type updatesMsg struct {
+	pkgs []manager.Package
 	err  error
 }
 
@@ -149,6 +159,9 @@ type Model struct {
 	markedRemove           map[string]manager.Package
 	loadingDetailsFor      string
 	statusMsg              string
+	updates                []Item
+	updatesLoaded          bool
+	loadingUpdates         bool
 	statusIsErr            bool
 }
 
@@ -228,8 +241,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft:
 			if msg.Y == 0 {
 				if t := m.tabAt(msg.X); t >= 0 {
-					m.activeTab = t
-					m.updateListItems()
+					cmds = append(cmds, m.setTab(t))
 				} else if msg.X >= lipgloss.Width(HeaderStyle.Render(" GOPAC ")) {
 					m.focusSide = 2
 					m.searching = true
@@ -478,12 +490,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case 0:
 			switch msg.String() {
 			case "left", "h":
-				m.activeTab = (m.activeTab - 1 + len(tabs)) % len(tabs)
-				m.updateListItems()
+				cmds = append(cmds, m.setTab((m.activeTab-1+len(tabs))%len(tabs)))
 			case "right", "l":
-				m.activeTab = (m.activeTab + 1) % len(tabs)
-				m.updateListItems()
+				cmds = append(cmds, m.setTab((m.activeTab+1)%len(tabs)))
 			case "enter":
+				if m.activeTab == updatesTab {
+					// Arch does not support partial upgrades.
+					return m, execCmd(manager.UpdateSystem(), false)
+				}
 				if i, ok := m.list.SelectedItem().(Item); ok {
 					m.confirmIsBulk = false
 					m.confirmRemove = nil
@@ -503,6 +517,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			case " ":
+				if m.activeTab == updatesTab {
+					m.setStatus("Partial upgrades are unsupported on Arch; press Enter or U to upgrade everything", true)
+					return m, nil
+				}
 				if i, ok := m.list.SelectedItem().(Item); ok {
 					name := i.Pkg.Name
 					if i.Pkg.IsInstalled {
@@ -614,8 +632,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.pkg.Name == m.loadingDetailsFor {
 			m.loadingDetailsFor = ""
 		}
-		for i := range m.allItems {
-			it := &m.allItems[i]
+		for _, it := range m.items() {
 			// The same name can exist both in the repos and in the AUR.
 			if it.Pkg.Name != msg.pkg.Name || it.Pkg.IsAUR != msg.pkg.IsAUR {
 				continue
@@ -628,16 +645,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			pkg := msg.pkg
 			pkg.IsInstalled = it.Pkg.IsInstalled
 			pkg.PKGBUILD = it.Pkg.PKGBUILD
+			if it.Pkg.OldVersion != "" {
+				// Pending update: keep showing installed -> new version.
+				pkg.OldVersion, pkg.Version = it.Pkg.OldVersion, it.Pkg.Version
+			}
 			it.Pkg = pkg
 			it.DetailErr = ""
 		}
 		m.updateListItems()
 
 	case pkgbuildMsg:
-		for i := range m.allItems {
-			if m.allItems[i].Pkg.Name == msg.name && m.allItems[i].Pkg.IsAUR {
-				m.allItems[i].Pkg.PKGBUILD = msg.content
+		for _, it := range m.items() {
+			if it.Pkg.Name == msg.name && it.Pkg.IsAUR {
+				it.Pkg.PKGBUILD = msg.content
 			}
+		}
+		m.updateListItems()
+
+	case updatesMsg:
+		m.loadingUpdates = false
+		m.updatesLoaded = true
+		if msg.err != nil {
+			m.setStatus("Checking updates: "+msg.err.Error(), true)
+		}
+		m.updates = make([]Item, len(msg.pkgs))
+		for i, pkg := range msg.pkgs {
+			m.updates[i] = Item{Pkg: pkg}
 		}
 		m.updateListItems()
 
@@ -652,7 +685,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.setStatus("Done", false)
 		}
-		return m, refreshInstalledStatus
+		m.updatesLoaded = false
+		loadUpdates := m.loadUpdatesIfNeeded()
+		return m, tea.Batch(refreshInstalledStatus, loadUpdates)
 	}
 
 	if i, ok := m.list.SelectedItem().(Item); ok {
@@ -694,9 +729,53 @@ func (m Model) tabAt(x int) int {
 	return -1
 }
 
+// items returns pointers to every item the model holds, across data sets.
+func (m *Model) items() []*Item {
+	all := make([]*Item, 0, len(m.allItems)+len(m.updates))
+	for i := range m.allItems {
+		all = append(all, &m.allItems[i])
+	}
+	for i := range m.updates {
+		all = append(all, &m.updates[i])
+	}
+	return all
+}
+
+func (m *Model) setTab(t int) tea.Cmd {
+	m.activeTab = t
+	m.updateListItems()
+	return m.loadUpdatesIfNeeded()
+}
+
+// loadUpdatesIfNeeded starts an update check when the updates tab is shown
+// and its data is missing or stale.
+func (m *Model) loadUpdatesIfNeeded() tea.Cmd {
+	if m.activeTab != updatesTab || m.updatesLoaded || m.loadingUpdates {
+		return nil
+	}
+	m.loadingUpdates = true
+	return func() tea.Msg {
+		pkgs, err := manager.ListUpdates(context.Background())
+		return updatesMsg{pkgs: pkgs, err: err}
+	}
+}
+
 func (m *Model) updateListItems() {
 	var filtered []list.Item
 	mode := tabs[m.activeTab]
+
+	if mode == "UPDATES" {
+		q := strings.ToLower(m.currentQuery)
+		for i := range m.updates {
+			m.updates[i].Query = m.currentQuery
+			if strings.Contains(strings.ToLower(m.updates[i].Pkg.Name), q) {
+				filtered = append(filtered, m.updates[i])
+			}
+		}
+		m.list.SetItems(filtered)
+		return
+	}
+
 	for i := range m.allItems {
 		m.allItems[i].Query = m.currentQuery
 		_, m.allItems[i].MarkedInst = m.markedInstall[m.allItems[i].Pkg.Name]

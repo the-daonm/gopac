@@ -20,6 +20,7 @@ import (
 type Package struct {
 	Name        string
 	Version     string
+	OldVersion  string // installed version, set for pending updates
 	Description string
 	IsAUR       bool
 	IsInstalled bool

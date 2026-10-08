@@ -90,6 +90,11 @@ func (m Model) View() string {
 		msg := lipgloss.NewStyle().Foreground(CurrentTheme.Red).Bold(true).Render("No Packages Found")
 		if m.isSearching {
 			msg = lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Bold(true).Render("Searching...")
+		} else if m.activeTab == updatesTab {
+			msg = lipgloss.NewStyle().Foreground(CurrentTheme.Green).Bold(true).Render("System is up to date")
+			if m.loadingUpdates {
+				msg = lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Bold(true).Render(m.spinner.View() + " Checking for updates...")
+			}
 		}
 		listContent = lipgloss.Place(listViewWidth-4, listViewHeight, lipgloss.Center, lipgloss.Center, msg)
 	} else {
