@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="gopac logo">
+  <title>gopac</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#32302f"/>
+      <stop offset="1" stop-color="#1d2021"/>
+    </linearGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fabd2f"/>
+      <stop offset="1" stop-color="#f4a92a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background tile -->
+  <rect width="256" height="256" rx="56" fill="url(#bg)"/>
+  <rect x="2" y="2" width="252" height="252" rx="54" fill="none" stroke="#504945" stroke-width="2"/>
+
+  <!-- Shadow -->
+  <ellipse cx="128" cy="214" rx="70" ry="12" fill="#000" opacity="0.35"/>
+
+  <!-- Package box (isometric) -->
+  <polygon points="128,52 200,92 128,132 56,92" fill="url(#top)"/>
+  <polygon points="56,92 128,132 128,212 56,172" fill="#d79921"/>
+  <polygon points="128,132 200,92 200,172 128,212" fill="#af3a03"/>
+  <polygon points="128,132 200,92 200,172 128,212" fill="#d65d0e" opacity="0.85"/>
+
+  <!-- Tape across the lid and down the side -->
+  <polygon points="101,67 173,107 155,117 83,77" fill="#fe8019"/>
+  <polygon points="155,117 173,107 173,141 155,151" fill="#fe8019" opacity="0.9"/>
+
+  <!-- Edge highlights -->
+  <polyline points="56,92 128,132 200,92" fill="none" stroke="#fbf1c7" stroke-opacity="0.35" stroke-width="2" stroke-linejoin="round"/>
+  <line x1="128" y1="132" x2="128" y2="212" stroke="#1d2021" stroke-opacity="0.25" stroke-width="2"/>
+
+  <!-- Terminal prompt on the front face -->
+  <g transform="matrix(1,0.5556,0,1,56,92)" stroke="#282828" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <polyline points="18,24 30,34 18,44"/>
+    <line x1="36" y1="46" x2="52" y2="46"/>
+  </g>
+</svg>

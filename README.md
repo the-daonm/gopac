@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="assets/logo.svg" width="128" height="128" alt="gopac logo" />
+</p>
+
+<p align="center">
   <a href="https://aur.archlinux.org/packages/gopac/"><img src="https://img.shields.io/static/v1?label=gopac&message=v1.5.0&color=1793d1&style=flat-square" alt="AUR Package" /></a>
   <a href="https://aur.archlinux.org/packages/gopac-bin/"><img src="https://img.shields.io/static/v1?label=gopac-bin&message=v1.5.0&color=1793d1&style=flat-square" alt="AUR Binary Package" /></a>
   <a href="LICENCE"><img src="https://img.shields.io/static/v1?label=license&message=MIT&color=ea6962&style=flat-square" alt="License" /></a>
