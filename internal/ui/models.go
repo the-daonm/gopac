@@ -94,34 +94,34 @@ type searchResultsMsg struct {
 }
 
 type Model struct {
-	list            list.Model
-	input           textinput.Model
-	viewport        viewport.Model
-	spinner         spinner.Model
-	searching       bool
-	isSearching     bool
-	allItems        []Item
-	activeTab       int
-	width, height   int
-	listWidth       int
-	descWidth       int
-	panelHeight     int
-	currentQuery    string
-	lastSelectedPkg string
-	showingPKGBUILD bool
-	showingHelp     bool
+	list                   list.Model
+	input                  textinput.Model
+	viewport               viewport.Model
+	spinner                spinner.Model
+	searching              bool
+	isSearching            bool
+	allItems               []Item
+	activeTab              int
+	width, height          int
+	listWidth              int
+	descWidth              int
+	panelHeight            int
+	currentQuery           string
+	lastSelectedPkg        string
+	showingPKGBUILD        bool
+	showingHelp            bool
 	showingConfirm         bool
 	confirmIsBulk          bool
 	confirmInstallOfficial []string
 	confirmInstallAUR      []string
 	confirmRemove          []string
-	focusSide       int // 0: List, 1: Detail, 2: Search
-	searchCancel    context.CancelFunc
-	searchHistory   []string
-	historyIdx      int
-	markedInstall   map[string]manager.Package
-	markedRemove    map[string]manager.Package
-	loadingDetailsFor string
+	focusSide              int // 0: List, 1: Detail, 2: Search
+	searchCancel           context.CancelFunc
+	searchHistory          []string
+	historyIdx             int
+	markedInstall          map[string]manager.Package
+	markedRemove           map[string]manager.Package
+	loadingDetailsFor      string
 }
 
 func NewModel() Model {
@@ -151,8 +151,8 @@ func NewModel() Model {
 	return Model{
 		list: l, input: ti, viewport: viewport.New(0, 0), spinner: s, searching: true, allItems: []Item{}, activeTab: 0, focusSide: 2,
 		searchHistory: []string{}, historyIdx: -1,
-		markedInstall: make(map[string]manager.Package),
-		markedRemove:  make(map[string]manager.Package),
+		markedInstall:     make(map[string]manager.Package),
+		markedRemove:      make(map[string]manager.Package),
 		loadingDetailsFor: "",
 	}
 }

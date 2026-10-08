@@ -70,7 +70,7 @@ func (m Model) View() string {
 	// Build the pill-shaped search input box
 	leftPill := lipgloss.NewStyle().Foreground(CurrentTheme.Base).Background(CurrentTheme.Highlight).Render("")
 	rightPill := lipgloss.NewStyle().Foreground(CurrentTheme.Base).Background(CurrentTheme.Highlight).Render("")
-	
+
 	searchContent := lipgloss.NewStyle().
 		Background(CurrentTheme.Base).
 		Foreground(searchBorderColor).
@@ -313,4 +313,3 @@ func (m Model) confirmView() string {
 			Padding(1, 4).
 			Render(body))
 }
-
