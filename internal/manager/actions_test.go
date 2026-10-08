@@ -112,7 +112,7 @@ func TestBulkActionCmd(t *testing.T) {
 		t.Fatal("Expected non-nil command")
 	}
 
-	expectedArgs := []string{"sh", "-c", "sudo pacman -Rns -- vim nano && sudo pacman -S -- git curl && yay -S -- yay-git"}
+	expectedArgs := []string{"sh", "-c", "sudo pacman -Rns -- vim nano && sudo pacman -S -- git curl && yay -S -- yay-git" + pauseOnFailure}
 	if len(cmd.Args) != len(expectedArgs) {
 		t.Fatalf("Expected %d arguments, got %d. Args: %v", len(expectedArgs), len(cmd.Args), cmd.Args)
 	}

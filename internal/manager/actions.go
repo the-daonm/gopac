@@ -36,19 +36,12 @@ func detectAURHelper() string {
 }
 
 func UpdateSystem() *exec.Cmd {
-	var cmd *exec.Cmd
 	helper := detectAURHelper()
 
 	if helper != "" && helper != "pacman" {
-		cmd = exec.Command(helper, "-Syu")
-	} else {
-		cmd = exec.Command("sudo", "pacman", "-Syu")
+		return interactiveShell(shellQuote(helper) + " -Syu")
 	}
-
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd
+	return interactiveShell("sudo pacman -Syu")
 }
 
 func InstallOrRemove(pkgName string, isAUR bool, remove bool) *exec.Cmd {
@@ -99,9 +92,15 @@ func BulkActionCmd(toInstallOfficial []string, toInstallAUR []string, toRemove [
 		return nil
 	}
 
-	// Join commands with " && " and run via sh -c
-	fullCmd := strings.Join(commands, " && ")
-	cmd := exec.Command("sh", "-c", fullCmd)
+	return interactiveShell(strings.Join(commands, " && "))
+}
+
+// pauseOnFailure keeps the output of a failed command on screen until the user
+// presses Enter; otherwise the TUI redraws immediately and hides the error.
+const pauseOnFailure = ` || { s=$?; printf '\n\033[1;31mgopac: command failed (exit %d). Press Enter to return...\033[0m' "$s"; read -r _; exit "$s"; }`
+
+func interactiveShell(script string) *exec.Cmd {
+	cmd := exec.Command("sh", "-c", script+pauseOnFailure)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
