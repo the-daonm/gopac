@@ -18,7 +18,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var tabs = []string{"ALL", "AUR", "OFFICIAL", "INSTALLED"}
+var tabs = []string{"ALL", "AUR", "OFFICIAL", "INSTALLED", "ORPHANS"}
 
 type Item struct {
 	Pkg        manager.Package
@@ -84,9 +84,13 @@ func (i Item) Description() string {
 func (i Item) FilterValue() string { return i.Pkg.Name }
 
 type (
-	InstalledMapMsg map[string]bool
-	TickMsg         time.Time
+	TickMsg time.Time
 )
+
+type installedStateMsg struct {
+	installed map[string]bool
+	orphans   map[string]bool
+}
 
 type detailsMsg struct {
 	pkg manager.Package
@@ -577,9 +581,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.allItems = items
 		m.updateListItems()
 
-	case InstalledMapMsg:
+	case installedStateMsg:
 		for i := range m.allItems {
-			m.allItems[i].Pkg.IsInstalled = msg[m.allItems[i].Pkg.Name]
+			m.allItems[i].Pkg.IsInstalled = msg.installed[m.allItems[i].Pkg.Name]
+			m.allItems[i].Pkg.IsOrphan = msg.orphans[m.allItems[i].Pkg.Name]
 			// Versions and install metadata may have changed; refetch lazily.
 			m.allItems[i].Pkg.Detailed = false
 			m.allItems[i].DetailErr = ""
@@ -713,6 +718,10 @@ func (m *Model) updateListItems() {
 			if item.Pkg.IsInstalled {
 				filtered = append(filtered, item)
 			}
+		case "ORPHANS":
+			if item.Pkg.IsOrphan {
+				filtered = append(filtered, item)
+			}
 		}
 	}
 	m.list.SetItems(filtered)
@@ -747,7 +756,10 @@ func loadInstalled() tea.Msg {
 func refreshInstalledStatus() tea.Msg {
 	manager.InvalidateCaches()
 	manager.RefreshInstalledCache()
-	return InstalledMapMsg(manager.GetInstalledCache())
+	return installedStateMsg{
+		installed: manager.GetInstalledCache(),
+		orphans:   manager.GetOrphanCache(),
+	}
 }
 
 func renderDescription(item Item, width int) string {

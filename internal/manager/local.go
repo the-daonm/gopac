@@ -19,6 +19,7 @@ func ListInstalled() ([]Package, error) {
 	}
 
 	foreign := pacmanNameSet("-Qmq")
+	orphans := pacmanNameSet("-Qdtq")
 
 	var pkgs []Package
 	for block := range strings.SplitSeq(string(out), "\n\n") {
@@ -31,6 +32,7 @@ func ListInstalled() ([]Package, error) {
 			continue
 		}
 		p.IsInstalled = true
+		p.IsOrphan = orphans[p.Name]
 		if foreign[p.Name] {
 			p.IsAUR = true
 			p.Detailed = false

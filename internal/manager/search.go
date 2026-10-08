@@ -23,6 +23,7 @@ type Package struct {
 	Description string
 	IsAUR       bool
 	IsInstalled bool
+	IsOrphan    bool // installed as a dependency but no longer required
 	Votes       int
 
 	URL          string
@@ -564,6 +565,7 @@ func parsePacmanOutput(raw string, query string) []Package {
 
 var (
 	installedCache map[string]bool
+	orphanCache    map[string]bool
 	cacheMu        sync.RWMutex
 )
 
@@ -578,9 +580,18 @@ func RefreshInstalledCache() {
 			newCache[line] = true
 		}
 	}
+	orphans := pacmanNameSet("-Qdtq")
+
 	cacheMu.Lock()
 	installedCache = newCache
+	orphanCache = orphans
 	cacheMu.Unlock()
+}
+
+func GetOrphanCache() map[string]bool {
+	cacheMu.RLock()
+	defer cacheMu.RUnlock()
+	return maps.Clone(orphanCache)
 }
 
 func GetInstalledCache() map[string]bool {
@@ -603,6 +614,7 @@ func checkInstalledStatus(pkgs []Package) {
 	defer cacheMu.RUnlock()
 	for i := range pkgs {
 		pkgs[i].IsInstalled = installedCache[pkgs[i].Name]
+		pkgs[i].IsOrphan = orphanCache[pkgs[i].Name]
 	}
 }
 
