@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -88,7 +89,9 @@ func SearchContext(ctx context.Context, query string) ([]Package, error) {
 		default:
 		}
 
-		cmd := exec.CommandContext(ctx, "pacman", "-Ss", "--", query)
+		// pacman treats the query as a regex; escape it so input such as
+		// "gtk+" or "(" is matched literally instead of failing.
+		cmd := exec.CommandContext(ctx, "pacman", "-Ss", "--", regexp.QuoteMeta(query))
 		cmd.Env = append(os.Environ(), "LC_ALL=C")
 		out, err := cmd.Output()
 		if err != nil && ctx.Err() != nil {
