@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -537,21 +538,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case searchResultsMsg:
-		if msg.query != m.currentQuery {
-			// Outdated search result, ignore it!
+		if msg.query != m.currentQuery || errors.Is(msg.err, context.Canceled) {
+			// Outdated or superseded search result, ignore it!
 			return m, nil
 		}
 		m.isSearching = false
 		if msg.err != nil {
 			m.setStatus("Search failed: "+msg.err.Error(), true)
-		} else {
-			items := make([]Item, len(msg.pkgs))
-			for i, pkg := range msg.pkgs {
-				items[i] = Item{Pkg: pkg, Query: msg.query}
-			}
-			m.allItems = items
-			m.updateListItems()
 		}
+		// Results may be partial (e.g. AUR unreachable), still show them.
+		items := make([]Item, len(msg.pkgs))
+		for i, pkg := range msg.pkgs {
+			items[i] = Item{Pkg: pkg, Query: msg.query}
+		}
+		m.allItems = items
+		m.updateListItems()
 
 	case InstalledMapMsg:
 		for i := range m.allItems {

@@ -79,6 +79,7 @@ func SearchContext(ctx context.Context, query string) ([]Package, error) {
 	}
 
 	var results []Package
+	var aurErr error
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
@@ -114,11 +115,13 @@ func SearchContext(ctx context.Context, query string) ([]Package, error) {
 		}
 
 		aurPkgs, err := searchAURContext(ctx, query)
-		if err == nil {
-			mu.Lock()
+		mu.Lock()
+		if err != nil {
+			aurErr = err
+		} else {
 			results = append(results, aurPkgs...)
-			mu.Unlock()
 		}
+		mu.Unlock()
 	})
 
 	wg.Wait()
@@ -132,6 +135,12 @@ func SearchContext(ctx context.Context, query string) ([]Package, error) {
 	}
 
 	sortPackages(results, query)
+
+	// Return partial (official-only) results on AUR failure, but don't cache
+	// them so the next search retries the AUR.
+	if aurErr != nil {
+		return results, aurErr
+	}
 
 	searchCacheMu.Lock()
 	searchCache[query] = results
