@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	"gopac/internal/manager"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestDetailsMsgOnlyUpdatesMatchingSource(t *testing.T) {
@@ -42,5 +45,18 @@ func TestDetailsMsgErrorStopsLoading(t *testing.T) {
 	}
 	if m.loadingDetailsFor != "" {
 		t.Errorf("expected loading state to be cleared")
+	}
+}
+
+func TestViewFitsNarrowTerminal(t *testing.T) {
+	ApplyTheme("")
+	m := NewModel()
+	res, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = res.(Model)
+	m.focusSide = 0
+	m.searching = false
+
+	if h := lipgloss.Height(m.View()); h != 24 {
+		t.Errorf("view height = %d, want 24", h)
 	}
 }

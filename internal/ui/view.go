@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func (m Model) View() string {
@@ -116,6 +117,9 @@ func (m Model) View() string {
 		}
 		helpText = lipgloss.NewStyle().Foreground(color).Bold(true).Render(" "+m.statusMsg+" ") + "•" + helpText
 	}
+
+	// Keep the status bar on one line; wrapping would push the header off-screen.
+	helpText = ansi.Truncate(helpText, m.width, "…")
 
 	statusBar := lipgloss.NewStyle().
 		Width(m.width).
