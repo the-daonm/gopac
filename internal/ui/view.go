@@ -23,38 +23,7 @@ func (m Model) View() string {
 
 	header := m.headerView()
 
-	totalQueued := len(m.markedInstall) + len(m.markedRemove)
-	queueText := ""
-	if totalQueued > 0 {
-		queueText = fmt.Sprintf(" • 📥 QUEUE: %d (+%d, -%d) Press 'I' to Apply, 'C' to Clear", totalQueued, len(m.markedInstall), len(m.markedRemove))
-	}
-
-	// Dynamic Status Bar
-	var helpText string
-	if m.searching {
-		helpText = "   SEARCHING • Enter: Search • Tab: Focus List • Esc: Cancel " + queueText
-	} else if m.focusSide == 0 {
-		helpText = "   LIST VIEW • h/l: Change Tab • Enter: Install/Remove • Space: Queue • Tab: Focus Details • /: Search • ?: Help " + queueText
-	} else {
-		helpText = "   DETAILS • j/k: Scroll • Esc: Back to List • Tab: Focus Search • ?: Help " + queueText
-	}
-
-	if m.statusMsg != "" {
-		color := CurrentTheme.Green
-		if m.statusIsErr {
-			color = CurrentTheme.Red
-		}
-		helpText = lipgloss.NewStyle().Foreground(color).Bold(true).Render(" "+m.statusMsg+" ") + "•" + helpText
-	}
-
-	// Keep the status bar on one line; wrapping would push the header off-screen.
-	helpText = ansi.Truncate(helpText, m.width, "…")
-
-	statusBar := lipgloss.NewStyle().
-		Width(m.width).
-		Foreground(CurrentTheme.Gray).
-		Background(CurrentTheme.Base).
-		Render(helpText)
+	statusBar := m.statusBarView()
 
 	// Content Layout
 	contentHeight := m.height - lipgloss.Height(header) - lipgloss.Height(statusBar)
@@ -87,16 +56,7 @@ func (m Model) View() string {
 
 	var listContent string
 	if len(m.list.Items()) == 0 {
-		msg := lipgloss.NewStyle().Foreground(CurrentTheme.Red).Bold(true).Render("No Packages Found")
-		if m.isSearching {
-			msg = lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Bold(true).Render("Searching...")
-		} else if m.activeTab == updatesTab {
-			msg = lipgloss.NewStyle().Foreground(CurrentTheme.Green).Bold(true).Render("System is up to date")
-			if m.loadingUpdates {
-				msg = lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Bold(true).Render(m.spinner.View() + " Checking for updates...")
-			}
-		}
-		listContent = lipgloss.Place(listViewWidth-4, listViewHeight, lipgloss.Center, lipgloss.Center, msg)
+		listContent = lipgloss.Place(max(listViewWidth-4, 0), listViewHeight, lipgloss.Center, lipgloss.Center, m.emptyListView())
 	} else {
 		listContent = m.list.View()
 	}
@@ -121,42 +81,49 @@ func (m Model) View() string {
 }
 
 func (m Model) helpView() string {
-	title := HeaderStyle.Render(" GOPAC HELP ")
-
-	rows := []struct {
-		Key  string
-		Desc string
+	sections := []struct {
+		title string
+		rows  [][2]string
 	}{
-		{"/", "Search packages"},
-		{"U", "Update system packages"},
-		{"Tab", "Cycle focus (Search/List/Details)"},
-		{"Space", "Queue/unqueue package"},
-		{"I", "Apply queued changes (Confirm)"},
-		{"C", "Clear queue"},
-		{"Enter", "Install/Remove (Confirm)"},
-		{"h/l or ◄/►", "Change tab filter"},
-		{"j/k or Up/Down", "Scroll details (in Details view)"},
-		{"Esc", "Return to list view (in Details view)"},
-		{"p", "View PKGBUILD (AUR only)"},
-		{"Up/Down", "Search history (when searching)"},
-		{"Mouse", "Click to focus panels or tabs"},
-		{"?", "Toggle help"},
-		{"q or Ctrl+C", "Quit"},
+		{"Navigation", [][2]string{
+			{"/", "Search packages"},
+			{"Tab / S-Tab", "Cycle focus: search, list, details"},
+			{"h/l  ←/→", "Switch tab"},
+			{"j/k  ↑/↓", "Move in list or scroll details"},
+			{"Ctrl+d/u", "Page details down/up"},
+			{"↑/↓", "Search history (while searching)"},
+			{"Mouse", "Click tabs, panels and packages"},
+		}},
+		{"Packages", [][2]string{
+			{"Enter", "Install / remove selected package"},
+			{"Space", "Queue / unqueue selected package"},
+			{"a", "Queue / unqueue all visible packages"},
+			{"I", "Apply queued changes"},
+			{"C", "Clear the queue"},
+			{"p", "Toggle PKGBUILD (AUR only)"},
+		}},
+		{"System", [][2]string{
+			{"U", "Upgrade the whole system"},
+			{"r", "Refresh package data"},
+			{"?", "Toggle this help"},
+			{"q  Ctrl+C", "Quit"},
+		}},
 	}
+
+	keyStyle := lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Bold(true).Width(14)
+	descStyle := lipgloss.NewStyle().Foreground(CurrentTheme.Text)
+	titleStyle := lipgloss.NewStyle().Foreground(CurrentTheme.Header).Bold(true).Underline(true)
 
 	var sb strings.Builder
-	sb.WriteByte('\n')
-	sb.WriteString(title)
-	sb.WriteString("\n\n")
-
-	for _, r := range rows {
-		key := lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Bold(true).Width(15).Render(r.Key)
-		desc := lipgloss.NewStyle().Foreground(CurrentTheme.Text).Render(r.Desc)
-		fmt.Fprintf(&sb, "%s %s\n", key, desc)
+	sb.WriteString(HeaderStyle.Render(" GOPAC HELP "))
+	sb.WriteString("\n")
+	for _, sec := range sections {
+		sb.WriteString("\n" + titleStyle.Render(sec.title) + "\n")
+		for _, r := range sec.rows {
+			fmt.Fprintf(&sb, "  %s %s\n", keyStyle.Render(r[0]), descStyle.Render(r[1]))
+		}
 	}
-
-	sb.WriteByte('\n')
-	sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render("Press '?' to close help"))
+	sb.WriteString("\n" + lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render("Press ? or Esc to close"))
 
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
 		lipgloss.NewStyle().
@@ -260,9 +227,26 @@ func (m Model) confirmView() string {
 			Render(body))
 }
 
-// tabLabel is the text shown for tab i in the header.
+// tabLabel is the text shown for tab i in the header, with the number of
+// packages it holds once known.
 func (m Model) tabLabel(i int) string {
-	return tabs[i]
+	n := 0
+	if i == updatesTab {
+		if !m.updatesLoaded {
+			return tabs[i]
+		}
+		n = len(m.updates)
+	} else {
+		for _, it := range m.allItems {
+			if matchesTab(tabs[i], it.Pkg) {
+				n++
+			}
+		}
+	}
+	if n == 0 {
+		return tabs[i]
+	}
+	return fmt.Sprintf("%s %d", tabs[i], n)
 }
 
 func (m Model) tabsView() string {
@@ -316,4 +300,78 @@ func (m Model) headerView() string {
 		header += gap + tabsView
 	}
 	return bg.Width(m.width).Render(ansi.Truncate(header, m.width, ""))
+}
+
+func (m Model) emptyListView() string {
+	bold := lipgloss.NewStyle().Bold(true)
+	hint := lipgloss.NewStyle().Foreground(CurrentTheme.Gray)
+	switch {
+	case m.isSearching:
+		return bold.Foreground(CurrentTheme.Focus).Render(m.spinner.View() + " Searching...")
+	case m.activeTab == updatesTab && m.loadingUpdates:
+		return bold.Foreground(CurrentTheme.Focus).Render(m.spinner.View() + " Checking for updates...")
+	case m.activeTab == updatesTab:
+		return bold.Foreground(CurrentTheme.Green).Render("✓ System is up to date") + "\n\n" + hint.Render("press r to check again")
+	case tabs[m.activeTab] == "ORPHANS":
+		return bold.Foreground(CurrentTheme.Green).Render("✓ No orphaned packages")
+	case m.currentQuery == "":
+		return bold.Foreground(CurrentTheme.Focus).Render("Nothing here yet") + "\n\n" + hint.Render("press / to search")
+	default:
+		return bold.Foreground(CurrentTheme.Red).Render("No packages found") + "\n\n" + hint.Render("try another tab or query")
+	}
+}
+
+type keyHint struct{ key, desc string }
+
+func (m Model) keyHints() (mode string, hints []keyHint) {
+	switch {
+	case m.searching:
+		return "SEARCH", []keyHint{{"enter", "search"}, {"↑↓", "history"}, {"tab", "list"}, {"esc", "cancel"}}
+	case m.focusSide == 1:
+		hints = []keyHint{{"j/k", "scroll"}, {"esc", "back"}}
+		if i, ok := m.list.SelectedItem().(Item); ok && i.Pkg.IsAUR {
+			hints = append(hints, keyHint{"p", "PKGBUILD"})
+		}
+		return "DETAILS", append(hints, keyHint{"?", "help"})
+	case m.activeTab == updatesTab:
+		return "UPDATES", []keyHint{{"enter/U", "upgrade all"}, {"r", "recheck"}, {"h/l", "tabs"}, {"/", "search"}, {"?", "help"}}
+	default:
+		return "LIST", []keyHint{{"enter", "install/remove"}, {"space", "queue"}, {"a", "queue all"}, {"h/l", "tabs"}, {"/", "search"}, {"r", "refresh"}, {"?", "help"}}
+	}
+}
+
+// statusBarView renders a single line: mode pill, status message and key
+// hints on the left; queue summary and position on the right.
+func (m Model) statusBarView() string {
+	t := CurrentTheme
+	base := lipgloss.NewStyle().Background(t.Base)
+
+	mode, hints := m.keyHints()
+	left := lipgloss.NewStyle().Foreground(t.Base).Background(t.Focus).Bold(true).Padding(0, 1).Render(mode)
+
+	if m.statusMsg != "" {
+		color := t.Green
+		if m.statusIsErr {
+			color = t.Red
+		}
+		left += base.Foreground(color).Bold(true).Render(" " + m.statusMsg)
+	} else {
+		for _, h := range hints {
+			left += base.Foreground(t.Text).Bold(true).Render("  "+h.key) + base.Foreground(t.Gray).Render(" "+h.desc)
+		}
+	}
+
+	var right string
+	if n := len(m.markedInstall) + len(m.markedRemove); n > 0 {
+		q := fmt.Sprintf(" QUEUE +%d -%d  I apply  C clear ", len(m.markedInstall), len(m.markedRemove))
+		right += lipgloss.NewStyle().Foreground(t.Base).Background(t.Yellow).Bold(true).Render(q)
+	}
+	if total := len(m.list.Items()); total > 0 {
+		right += base.Foreground(t.Gray).Render(fmt.Sprintf(" %d/%d ", m.list.Index()+1, total))
+	}
+
+	// Keep the bar on one line; wrapping would push the header off-screen.
+	left = ansi.Truncate(left, max(m.width-lipgloss.Width(right), 0), "…")
+	gap := base.Render(strings.Repeat(" ", max(m.width-lipgloss.Width(left)-lipgloss.Width(right), 0)))
+	return ansi.Truncate(left+gap+right, m.width, "")
 }

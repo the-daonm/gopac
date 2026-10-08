@@ -75,20 +75,34 @@ func (i Item) Title() string {
 }
 
 func (i Item) Description() string {
-	aurTag := lipgloss.NewStyle().Foreground(CurrentTheme.RepoAUR).Render("AUR")
-	offTag := lipgloss.NewStyle().Foreground(CurrentTheme.RepoOfficial).Render("Official")
-	tag := offTag
-	if i.Pkg.IsAUR {
-		tag = aurTag
-	}
-	desc := fmt.Sprintf("%s | %s", tag, i.Pkg.Version)
+	t := CurrentTheme
+	sep := lipgloss.NewStyle().Foreground(t.Gray).Render(" · ")
+	ver := lipgloss.NewStyle().Foreground(t.Text)
+
+	parts := []string{lipgloss.NewStyle().Foreground(GetRepoColor(i.Pkg.IsAUR)).Render(repoLabel(i.Pkg))}
 	if i.Pkg.OldVersion != "" {
-		desc = fmt.Sprintf("%s | %s → %s", tag, i.Pkg.OldVersion, i.Pkg.Version)
+		parts = append(parts, lipgloss.NewStyle().Foreground(t.Gray).Render(i.Pkg.OldVersion)+
+			lipgloss.NewStyle().Foreground(t.Green).Render(" → "+i.Pkg.Version))
+	} else {
+		parts = append(parts, ver.Render(i.Pkg.Version))
+	}
+	if i.Pkg.IsAUR && i.Pkg.Votes > 0 {
+		parts = append(parts, lipgloss.NewStyle().Foreground(t.Yellow).Render(fmt.Sprintf("★ %d", i.Pkg.Votes)))
 	}
 	if i.Pkg.OutOfDate > 0 {
-		desc += " | " + lipgloss.NewStyle().Foreground(CurrentTheme.Red).Render("out of date")
+		parts = append(parts, lipgloss.NewStyle().Foreground(t.Red).Render("out of date"))
 	}
-	return desc
+	if i.Pkg.IsOrphan {
+		parts = append(parts, lipgloss.NewStyle().Foreground(t.Orange).Render("orphan"))
+	}
+	return strings.Join(parts, sep)
+}
+
+func repoLabel(p manager.Package) string {
+	if p.IsAUR {
+		return "AUR"
+	}
+	return "Official"
 }
 
 func (i Item) FilterValue() string { return i.Pkg.Name }
@@ -854,30 +868,27 @@ func (m *Model) updateListItems() {
 		m.allItems[i].Query = m.currentQuery
 		_, m.allItems[i].MarkedInst = m.markedInstall[m.allItems[i].Pkg.Name]
 		_, m.allItems[i].MarkedRem = m.markedRemove[m.allItems[i].Pkg.Name]
-
-		item := m.allItems[i]
-		switch mode {
-		case "ALL":
-			filtered = append(filtered, item)
-		case "AUR":
-			if item.Pkg.IsAUR {
-				filtered = append(filtered, item)
-			}
-		case "OFFICIAL":
-			if !item.Pkg.IsAUR {
-				filtered = append(filtered, item)
-			}
-		case "INSTALLED":
-			if item.Pkg.IsInstalled {
-				filtered = append(filtered, item)
-			}
-		case "ORPHANS":
-			if item.Pkg.IsOrphan {
-				filtered = append(filtered, item)
-			}
+		if matchesTab(mode, m.allItems[i].Pkg) {
+			filtered = append(filtered, m.allItems[i])
 		}
 	}
 	m.list.SetItems(filtered)
+}
+
+// matchesTab reports whether p belongs in the given (non-updates) tab.
+func matchesTab(tab string, p manager.Package) bool {
+	switch tab {
+	case "AUR":
+		return p.IsAUR
+	case "OFFICIAL":
+		return !p.IsAUR
+	case "INSTALLED":
+		return p.IsInstalled
+	case "ORPHANS":
+		return p.IsOrphan
+	default:
+		return true
+	}
 }
 
 func performSearch(ctx context.Context, query string) tea.Cmd {
@@ -924,107 +935,121 @@ func refreshInstalledStatus() tea.Msg {
 }
 
 func renderDescription(item Item, width int) string {
+	t := CurrentTheme
 	p := item.Pkg
-	if !p.Detailed {
-		header := lipgloss.NewStyle().Foreground(CurrentTheme.RepoOfficial).Bold(true).Render(p.Name)
-		if p.IsAUR {
-			header = lipgloss.NewStyle().Foreground(CurrentTheme.RepoAUR).Bold(true).Render(p.Name)
-		}
-		body := "Loading details..."
-		if item.DetailErr != "" {
-			body = lipgloss.NewStyle().Foreground(CurrentTheme.Red).Render("Failed to load details: " + item.DetailErr)
-		}
-		return lipgloss.NewStyle().Width(width).Render(fmt.Sprintf("\n%s\n\n%s", header, body))
-	}
-
 	var sb strings.Builder
 
-	keyStyle := LabelStyle.Width(16)
-	valStyle := ValueStyle
-	headerStyle := lipgloss.NewStyle().Foreground(CurrentTheme.RepoOfficial).Bold(true).Background(CurrentTheme.Highlight).Padding(0, 1)
+	// Title line: name pill and version.
+	name := lipgloss.NewStyle().Foreground(t.Base).Background(GetRepoColor(p.IsAUR)).Bold(true).Padding(0, 1).Render(p.Name)
+	version := lipgloss.NewStyle().Foreground(t.Gray).Render(p.Version)
+	if p.OldVersion != "" {
+		version = lipgloss.NewStyle().Foreground(t.Gray).Render(p.OldVersion) +
+			lipgloss.NewStyle().Foreground(t.Green).Bold(true).Render(" → "+p.Version)
+	}
+	sb.WriteString("\n" + name + "  " + version + "\n\n")
+
+	// Badges summarise the package state at a glance.
+	badge := func(text string, color lipgloss.Color) string {
+		return lipgloss.NewStyle().Foreground(color).Background(t.Highlight).Bold(true).Padding(0, 1).Render(text)
+	}
+	badges := []string{badge(repoLabel(p), GetRepoColor(p.IsAUR))}
+	if p.IsInstalled {
+		badges = append(badges, badge("✓ installed", t.Green))
+	}
+	if p.OldVersion != "" {
+		badges = append(badges, badge("↑ update", t.Blue))
+	}
+	if p.OutOfDate > 0 {
+		badges = append(badges, badge("out of date", t.Red))
+	}
+	if p.IsOrphan {
+		badges = append(badges, badge("orphan", t.Orange))
+	}
+	if p.IsAUR && p.Detailed && p.Maintainer == "" {
+		badges = append(badges, badge("unmaintained", t.Red))
+	}
+	sb.WriteString(strings.Join(badges, " ") + "\n")
+
+	if p.Description != "" {
+		sb.WriteString("\n" + lipgloss.NewStyle().Foreground(t.Text).Italic(true).Width(width).Render(p.Description) + "\n")
+	}
+
+	if !p.Detailed {
+		body := lipgloss.NewStyle().Foreground(t.Gray).Render("Loading details...")
+		if item.DetailErr != "" {
+			body = lipgloss.NewStyle().Foreground(t.Red).Render("Failed to load details: " + item.DetailErr)
+		}
+		sb.WriteString("\n" + body)
+		return lipgloss.NewStyle().Width(width).Render(sb.String())
+	}
+
+	const labelWidth = 16
+	labelStyle := lipgloss.NewStyle().Foreground(t.Gray).Width(labelWidth)
+	valueStyle := lipgloss.NewStyle().Foreground(t.Text).Width(max(width-labelWidth, 10))
+	section := func(title string) {
+		rule := strings.Repeat("─", max(width-lipgloss.Width(title)-1, 0))
+		sb.WriteString("\n" + lipgloss.NewStyle().Foreground(t.Focus).Bold(true).Render(title) + " " +
+			lipgloss.NewStyle().Foreground(t.Highlight).Render(rule) + "\n")
+	}
+	row := func(k, v string) {
+		if v == "" {
+			return
+		}
+		sb.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, labelStyle.Render(k), valueStyle.Render(v)) + "\n")
+	}
+	listRow := func(k string, v []string, sep string) {
+		row(k, strings.Join(v, sep))
+	}
+	date := func(ts int64, layout string) string {
+		if ts == 0 {
+			return ""
+		}
+		return time.Unix(ts, 0).Format(layout)
+	}
+
+	section("Info")
+	row("URL", lipgloss.NewStyle().Foreground(t.Blue).Underline(true).Render(p.URL))
+	if p.IsAUR {
+		maintainer := p.Maintainer
+		if maintainer == "" {
+			maintainer = lipgloss.NewStyle().Foreground(t.Red).Render("none (orphaned)")
+		}
+		row("Maintainer", maintainer)
+		row("Votes", fmt.Sprintf("%d  (popularity %.2f)", p.Votes, p.Popularity))
+		listRow("Keywords", p.Keywords, "  ")
+	} else {
+		row("Architecture", p.Architecture)
+		row("Packager", p.Packager)
+	}
+	listRow("Licenses", p.Licenses, "  ")
+	listRow("Groups", p.Groups, "  ")
+	row("Download Size", p.DownloadSize)
+	row("Installed Size", p.InstalledSize)
+	row("Install Reason", p.InstallReason)
+	row("Validated By", p.ValidatedBy)
+	row("Submitted", date(p.FirstSubmitted, "2006-01-02"))
+	row("Last Modified", date(p.LastModified, "2006-01-02"))
+	row("Build Date", date(p.BuildDate, "2006-01-02 15:04"))
+	row("Install Date", date(p.InstallDate, "2006-01-02 15:04"))
+	if p.OutOfDate > 0 {
+		row("Out of Date", lipgloss.NewStyle().Foreground(t.Red).Render("flagged on "+date(p.OutOfDate, "2006-01-02")))
+	}
+
+	if len(p.Depends)+len(p.OptDepends)+len(p.MakeDepends)+len(p.CheckDepends)+len(p.RequiredBy)+
+		len(p.Provides)+len(p.Conflicts)+len(p.Replaces) > 0 {
+		section("Dependencies")
+		listRow("Depends On", p.Depends, "  ")
+		listRow("Optional", p.OptDepends, "\n")
+		listRow("Make Deps", p.MakeDepends, "  ")
+		listRow("Check Deps", p.CheckDepends, "  ")
+		listRow("Required By", p.RequiredBy, "  ")
+		listRow("Provides", p.Provides, "  ")
+		listRow("Conflicts", p.Conflicts, "  ")
+		listRow("Replaces", p.Replaces, "  ")
+	}
 
 	if p.IsAUR {
-		headerStyle = headerStyle.Foreground(CurrentTheme.RepoAUR)
-		fmt.Fprintf(&sb, "\n%s\n\n", headerStyle.Render(p.Name))
-
-		row := func(k, v string) {
-			if v == "" {
-				return
-			}
-			fmt.Fprintf(&sb, "%s : %s\n", keyStyle.Render(k), valStyle.Render(v))
-		}
-
-		row("Repository", "AUR")
-		row("Version", p.Version)
-		row("Description", p.Description)
-		row("URL", p.URL)
-		row("Maintainer", p.Maintainer)
-		row("Votes", fmt.Sprintf("%d (Pop: %.2f)", p.Votes, p.Popularity))
-		row("Keywords", strings.Join(p.Keywords, "  "))
-		row("Licenses", strings.Join(p.Licenses, "  "))
-
-		if p.FirstSubmitted > 0 {
-			row("Submitted", time.Unix(p.FirstSubmitted, 0).Format("2006-01-02"))
-		}
-		if p.LastModified > 0 {
-			row("Last Modified", time.Unix(p.LastModified, 0).Format("2006-01-02"))
-		}
-		if p.OutOfDate > 0 {
-			fmt.Fprintf(&sb, "%s : %s\n", keyStyle.Render("Out of Date"),
-				lipgloss.NewStyle().Foreground(CurrentTheme.Red).Render("flagged on "+time.Unix(p.OutOfDate, 0).Format("2006-01-02")))
-		}
-
-		if len(p.Depends) > 0 {
-			fmt.Fprintf(&sb, "\n%s\n%s\n", lipgloss.NewStyle().Foreground(CurrentTheme.Focus).Bold(true).Render("Dependencies"), valStyle.Render(strings.Join(p.Depends, "  ")))
-		}
-		if len(p.MakeDepends) > 0 {
-			fmt.Fprintf(&sb, "%s : %s\n", keyStyle.Render("Make Deps"), valStyle.Render(strings.Join(p.MakeDepends, "  ")))
-		}
-
-		sb.WriteString(lipgloss.NewStyle().Foreground(CurrentTheme.Gray).Render("\n[ PKGBUILD ]"))
-
-	} else {
-		fmt.Fprintf(&sb, "\n%s\n\n", headerStyle.Render(p.Name))
-
-		row := func(k, v string) {
-			fmt.Fprintf(&sb, "%s : %s\n", keyStyle.Render(k), valStyle.Render(v))
-		}
-		listRow := func(k string, v []string) {
-			if len(v) == 0 {
-				row(k, "None")
-			} else {
-				row(k, strings.Join(v, "  "))
-			}
-		}
-
-		row("Name", p.Name)
-		row("Version", p.Version)
-		row("Description", p.Description)
-		row("Architecture", p.Architecture)
-		row("URL", p.URL)
-		listRow("Licenses", p.Licenses)
-		listRow("Groups", p.Groups)
-		listRow("Provides", p.Provides)
-		listRow("Depends On", p.Depends)
-		listRow("Optional Deps", p.OptDepends)
-		listRow("Required By", p.RequiredBy)
-		listRow("Conflicts With", p.Conflicts)
-		listRow("Replaces", p.Replaces)
-		row("Download Size", p.DownloadSize)
-		row("Installed Size", p.InstalledSize)
-		row("Packager", p.Packager)
-
-		dateStr := func(t int64) string {
-			if t == 0 {
-				return "None"
-			}
-			return time.Unix(t, 0).Format("Mon 02 Jan 2006 03:04:05 PM MST")
-		}
-
-		row("Build Date", dateStr(p.BuildDate))
-		row("Install Date", dateStr(p.InstallDate))
-		row("Install Reason", p.InstallReason)
-		row("Validated By", p.ValidatedBy)
+		sb.WriteString("\n" + lipgloss.NewStyle().Foreground(t.Gray).Render("press p to review the PKGBUILD before installing"))
 	}
 
 	return lipgloss.NewStyle().Width(width).Render(sb.String())
