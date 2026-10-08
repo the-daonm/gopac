@@ -560,17 +560,27 @@ func GetInstalledCache() map[string]bool {
 
 func checkInstalledStatus(pkgs []Package) {
 	cacheMu.RLock()
-	defer cacheMu.RUnlock()
-
-	if installedCache == nil {
-		cacheMu.RUnlock()
+	empty := installedCache == nil
+	cacheMu.RUnlock()
+	if empty {
 		RefreshInstalledCache()
-		cacheMu.RLock()
 	}
 
+	cacheMu.RLock()
+	defer cacheMu.RUnlock()
 	for i := range pkgs {
-		if installedCache[pkgs[i].Name] {
-			pkgs[i].IsInstalled = true
-		}
+		pkgs[i].IsInstalled = installedCache[pkgs[i].Name]
 	}
+}
+
+// InvalidateCaches drops cached search results and package details, which go
+// stale once packages are installed, removed or upgraded.
+func InvalidateCaches() {
+	searchCacheMu.Lock()
+	clear(searchCache)
+	searchCacheMu.Unlock()
+
+	detailsCacheMu.Lock()
+	clear(detailsCache)
+	detailsCacheMu.Unlock()
 }

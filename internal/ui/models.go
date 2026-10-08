@@ -544,12 +544,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case InstalledMapMsg:
 		for i := range m.allItems {
-			if _, ok := msg[m.allItems[i].Pkg.Name]; ok {
-				m.allItems[i].Pkg.IsInstalled = true
-			} else {
-				m.allItems[i].Pkg.IsInstalled = false
-			}
+			m.allItems[i].Pkg.IsInstalled = msg[m.allItems[i].Pkg.Name]
+			// Versions and install metadata may have changed; refetch lazily.
+			m.allItems[i].Pkg.Detailed = false
 		}
+		m.loadingDetailsFor = ""
 		m.updateListItems()
 
 	case PackageDetailMsg:
@@ -633,6 +632,7 @@ func performSearch(ctx context.Context, query string) tea.Cmd {
 }
 
 func refreshInstalledStatus() tea.Msg {
+	manager.InvalidateCaches()
 	manager.RefreshInstalledCache()
 	return InstalledMapMsg(manager.GetInstalledCache())
 }
