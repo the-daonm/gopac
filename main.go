@@ -67,7 +67,8 @@ func main() {
 	// Load config
 	cfg, err := config.Load()
 	if err != nil {
-		// Just warn, don't exit. Config might not exist.
+		// Just warn, don't exit: defaults still work.
+		fmt.Fprintf(os.Stderr, "gopac: ignoring config: %v\n", err)
 	}
 
 	// Determine Theme
