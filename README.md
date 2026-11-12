@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  <a href="https://the-daonm.github.io/gopac/"><strong>Documentation</strong></a>
+</p>
+
+<p align="center">
   <a href="https://aur.archlinux.org/packages/gopac/"><img src="https://img.shields.io/aur/version/gopac?style=flat-square&color=1793d1&label=gopac" alt="AUR version" /></a>
   <a href="https://aur.archlinux.org/packages/gopac-bin/"><img src="https://img.shields.io/aur/version/gopac-bin?style=flat-square&color=1793d1&label=gopac-bin" alt="AUR binary version" /></a>
   <a href="https://github.com/the-daonm/gopac/actions/workflows/ci.yaml"><img src="https://img.shields.io/github/actions/workflow/status/the-daonm/gopac/ci.yaml?branch=main&style=flat-square&label=CI" alt="CI status" /></a>
