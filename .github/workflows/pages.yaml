@@ -1,0 +1,46 @@
+name: Pages
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "docs/**"
+      - "assets/**"
+      - "demo.gif"
+      - ".github/workflows/pages.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site/assets
+          cp -r docs/. _site/
+          cp assets/logo.svg _site/assets/
+          cp demo.gif _site/
+          touch _site/.nojekyll
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
