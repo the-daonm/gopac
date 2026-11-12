@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>gopac — Arch package TUI</title>
+  <meta name="description" content="gopac is a warm, keyboard-driven TUI for Arch Linux package management. Search the official repos and the AUR together, review before you install, and keep your system tidy." />
+  <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+  <meta property="og:title" content="gopac" />
+  <meta property="og:description" content="A warm, keyboard-driven TUI for Arch Linux package management." />
+  <meta property="og:image" content="assets/logo.svg" />
+  <style>
+    :root {
+      --bg: #fbf1c7;
+      --bg-soft: #f2e5bc;
+      --bg-card: #ebdbb2;
+      --fg: #3c3836;
+      --fg-muted: #665c54;
+      --border: #d5c4a1;
+      --accent: #af3a03;
+      --accent-2: #b57614;
+      --green: #79740e;
+      --blue: #076678;
+      --code-bg: #ebdbb2;
+      --kbd-bg: #f9f5d7;
+      --shadow: 0 1px 0 #d5c4a1;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #1d2021;
+        --bg-soft: #282828;
+        --bg-card: #32302f;
+        --fg: #ebdbb2;
+        --fg-muted: #a89984;
+        --border: #3c3836;
+        --accent: #fe8019;
+        --accent-2: #fabd2f;
+        --green: #b8bb26;
+        --blue: #83a598;
+        --code-bg: #282828;
+        --kbd-bg: #3c3836;
+        --shadow: 0 1px 0 #504945;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #1d2021;
+      --bg-soft: #282828;
+      --bg-card: #32302f;
+      --fg: #ebdbb2;
+      --fg-muted: #a89984;
+      --border: #3c3836;
+      --accent: #fe8019;
+      --accent-2: #fabd2f;
+      --green: #b8bb26;
+      --blue: #83a598;
+      --code-bg: #282828;
+      --kbd-bg: #3c3836;
+      --shadow: 0 1px 0 #504945;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    a:hover { color: var(--accent); }
+    code, pre, kbd { font-family: ui-monospace, "JetBrainsMono Nerd Font", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace; }
+    code { font-size: .9em; background: var(--code-bg); padding: .1em .35em; border-radius: 4px; }
+    kbd {
+      font-size: .85em; background: var(--kbd-bg); border: 1px solid var(--border);
+      border-bottom-width: 2px; border-radius: 5px; padding: .05em .45em; white-space: nowrap;
+    }
+
+    /* Top bar */
+    header.top {
+      position: sticky; top: 0; z-index: 10;
+      background: color-mix(in srgb, var(--bg) 88%, transparent);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+    }
+    .top-inner {
+      max-width: 1120px; margin: 0 auto; padding: 10px 16px;
+      display: flex; align-items: center; gap: 16px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--fg); text-decoration: none; font-size: 1.1rem; }
+    .brand img { width: 28px; height: 28px; }
+    .top-links { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+    .top-links a, .top-links button {
+      color: var(--fg-muted); text-decoration: none; font: inherit; font-size: .92rem;
+      background: none; border: 0; padding: 6px 10px; border-radius: 6px; cursor: pointer;
+    }
+    .top-links a:hover, .top-links button:hover { color: var(--fg); background: var(--bg-soft); }
+
+    /* Hero */
+    .hero { text-align: center; padding: 56px 16px 32px; }
+    .hero img.logo { width: 112px; height: 112px; }
+    .hero h1 { font-size: clamp(2.2rem, 6vw, 3.2rem); margin: 12px 0 4px; letter-spacing: -.02em; }
+    .hero p.tag { font-size: 1.15rem; color: var(--fg-muted); max-width: 620px; margin: 0 auto 24px; }
+    .install-pill {
+      display: inline-flex; align-items: center; gap: 12px; max-width: 100%;
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 10px 10px 16px; font-family: ui-monospace, Menlo, monospace; font-size: .95rem;
+    }
+    .install-pill .prompt { color: var(--accent); user-select: none; }
+    .cta { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 20px; }
+    .btn {
+      display: inline-block; padding: 9px 18px; border-radius: 8px; text-decoration: none; font-weight: 600;
+      border: 1px solid var(--border); color: var(--fg); background: var(--bg-soft);
+    }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+    .btn:hover { filter: brightness(1.05); color: inherit; }
+    .btn.primary:hover { color: var(--bg); }
+    .badges { margin-top: 20px; display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+    .demo { max-width: 880px; margin: 32px auto 0; padding: 0 16px; }
+    .demo img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--border); display: block; background: #1d2021; }
+
+    /* Layout */
+    .layout { max-width: 1120px; margin: 0 auto; padding: 24px 16px 64px; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 48px; }
+    nav.toc { position: sticky; top: 76px; align-self: start; font-size: .92rem; }
+    nav.toc ul { list-style: none; padding: 0; margin: 0; border-left: 2px solid var(--border); }
+    nav.toc a { display: block; padding: 4px 0 4px 14px; margin-left: -2px; color: var(--fg-muted); text-decoration: none; border-left: 2px solid transparent; }
+    nav.toc a:hover { color: var(--fg); }
+    nav.toc a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
+    @media (max-width: 860px) {
+      .layout { grid-template-columns: 1fr; gap: 0; }
+      nav.toc { display: none; }
+      .top-links .hide-sm { display: none; }
+    }
+
+    main section { padding-top: 8px; margin-bottom: 48px; }
+    main h2 { font-size: 1.65rem; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); letter-spacing: -.01em; }
+    main h3 { font-size: 1.15rem; margin: 28px 0 8px; }
+    main p { margin: 0 0 14px; }
+
+    .features { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+    .feature { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+    .feature h3 { margin: 0 0 6px; font-size: 1rem; color: var(--accent); }
+    .feature p { margin: 0; color: var(--fg-muted); font-size: .95rem; }
+
+    pre {
+      position: relative; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 14px 16px; overflow-x: auto; font-size: .88rem; line-height: 1.55; margin: 0 0 16px;
+    }
+    pre code { background: none; padding: 0; font-size: inherit; }
+    .c { color: var(--fg-muted); font-style: italic; }
+    .k { color: var(--accent); }
+    .s { color: var(--green); }
+    .copy {
+      position: absolute; top: 8px; right: 8px; font: 600 .75rem/1 ui-sans-serif, system-ui, sans-serif;
+      color: var(--fg-muted); background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
+      padding: 5px 8px; cursor: pointer; opacity: 0; transition: opacity .15s;
+    }
+    pre:hover .copy, .copy:focus-visible { opacity: 1; }
+    @media (hover: none) { .copy { opacity: 1; } }
+    .install-pill .copy { position: static; opacity: 1; }
+
+    .table-wrap { overflow-x: auto; margin: 0 0 16px; border: 1px solid var(--border); border-radius: 8px; }
+    table { border-collapse: collapse; width: 100%; font-size: .94rem; }
+    th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { background: var(--bg-soft); font-weight: 600; white-space: nowrap; }
+    tr:last-child td { border-bottom: 0; }
+    td:first-child { white-space: nowrap; }
+
+    .keys { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+    .keys h3 { margin: 0 0 8px; }
+    .keys .table-wrap { margin: 0; }
+
+    .callout {
+      border-left: 4px solid var(--accent-2); background: var(--bg-soft); border-radius: 0 8px 8px 0;
+      padding: 12px 16px; margin: 0 0 16px;
+    }
+    .callout.warn { border-left-color: var(--accent); }
+    .callout p:last-child { margin: 0; }
+
+    .swatches { display: flex; gap: 4px; }
+    .swatches span { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+
+    ol.steps { padding-left: 22px; margin: 0 0 14px; }
+    ol.steps li { margin-bottom: 4px; }
+
+    footer { border-top: 1px solid var(--border); color: var(--fg-muted); font-size: .9rem; text-align: center; padding: 24px 16px 40px; }
+    footer a { color: var(--fg-muted); }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <a class="brand" href="#"><img src="assets/logo.svg" alt="" width="28" height="28" />gopac</a>
+      <div class="top-links">
+        <a class="hide-sm" href="#install">Install</a>
+        <a class="hide-sm" href="#keybindings">Keys</a>
+        <a class="hide-sm" href="#configuration">Config</a>
+        <a href="https://github.com/the-daonm/gopac">GitHub</a>
+        <button id="theme-toggle" type="button" aria-label="Toggle colour theme" title="Toggle colour theme">◐</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="hero">
+    <img class="logo" src="assets/logo.svg" alt="gopac logo" width="112" height="112" />
+    <h1>gopac</h1>
+    <p class="tag">A warm, keyboard-driven TUI for Arch Linux package management. Search the official repos and the AUR together, review before you install, and keep your system tidy.</p>
+    <div class="install-pill">
+      <span><span class="prompt">$ </span><span id="pill-cmd">paru -S gopac</span></span>
+      <button class="copy" type="button" data-copy="paru -S gopac">Copy</button>
+    </div>
+    <div class="cta">
+      <a class="btn primary" href="#install">Get started</a>
+      <a class="btn" href="https://github.com/the-daonm/gopac/releases">Releases</a>
+      <a class="btn" href="https://aur.archlinux.org/packages/gopac/">AUR</a>
+    </div>
+    <div class="badges">
+      <a href="https://aur.archlinux.org/packages/gopac/"><img src="https://img.shields.io/aur/version/gopac?style=flat-square&color=1793d1&label=gopac" alt="AUR version" height="20" /></a>
+      <a href="https://aur.archlinux.org/packages/gopac-bin/"><img src="https://img.shields.io/aur/version/gopac-bin?style=flat-square&color=1793d1&label=gopac-bin" alt="AUR binary version" height="20" /></a>
+      <a href="https://github.com/the-daonm/gopac/actions/workflows/ci.yaml"><img src="https://img.shields.io/github/actions/workflow/status/the-daonm/gopac/ci.yaml?branch=main&style=flat-square&label=CI" alt="CI status" height="20" /></a>
+      <a href="https://github.com/the-daonm/gopac/blob/main/LICENCE"><img src="https://img.shields.io/static/v1?label=license&message=MIT&color=ea6962&style=flat-square" alt="MIT License" height="20" /></a>
+    </div>
+  </div>
+
+  <div class="demo">
+    <img src="demo.gif" alt="gopac demo: searching, browsing tabs and installing packages" loading="lazy" />
+  </div>
+
+  <div class="layout">
+    <nav class="toc" aria-label="On this page">
+      <ul>
+        <li><a href="#highlights">Highlights</a></li>
+        <li><a href="#install">Installation</a></li>
+        <li><a href="#usage">Usage</a></li>
+        <li><a href="#keybindings">Keybindings</a></li>
+        <li><a href="#configuration">Configuration</a></li>
+        <li><a href="#safety">How it changes your system</a></li>
+        <li><a href="#development">Development</a></li>
+      </ul>
+    </nav>
+
+    <main>
+      <section id="highlights">
+        <h2>Highlights</h2>
+        <div class="features">
+          <div class="feature"><h3>One search, two sources</h3><p>Official repositories and the AUR are searched in parallel and merged into a single list.</p></div>
+          <div class="feature"><h3>Your system at a glance</h3><p>Open gopac with an empty search to browse every installed package.</p></div>
+          <div class="feature"><h3>Pending updates</h3><p>The <strong>UPDATES</strong> tab shows repo and AUR upgrades as <code>old → new</code> before you run a full upgrade.</p></div>
+          <div class="feature"><h3>Orphan cleanup</h3><p>The <strong>ORPHANS</strong> tab lists dependencies nothing needs anymore. Queue them all with <kbd>a</kbd>, apply with <kbd>I</kbd>.</p></div>
+          <div class="feature"><h3>Review before you trust</h3><p>Read any AUR package's <strong>PKGBUILD</strong> in place. Out-of-date and unmaintained AUR packages are flagged.</p></div>
+          <div class="feature"><h3>Batch changes safely</h3><p>Queue installs and removals, then confirm them all in one summary screen.</p></div>
+          <div class="feature"><h3>Looks good in your terminal</h3><p>Five built-in themes, mouse support, and a layout that adapts to narrow windows.</p></div>
+        </div>
+      </section>
+
+      <section id="install">
+        <h2>Installation</h2>
+        <h3>From the AUR</h3>
+<pre><code>paru -S gopac        <span class="c"># build from source</span>
+paru -S gopac-bin    <span class="c"># pre-built binary</span></code></pre>
+        <p><code>yay -S ...</code> works just as well.</p>
+
+        <h3>From source</h3>
+        <p>Requires Go 1.25 or newer.</p>
+<pre><code>git clone https://github.com/the-daonm/gopac.git
+cd gopac
+make build
+sudo install -Dm755 gopac /usr/bin/gopac</code></pre>
+
+        <h3>Requirements</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Dependency</th><th>Required?</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td><code>pacman</code></td><td>Yes</td><td>Searching, installing and removing packages</td></tr>
+            <tr><td>An AUR helper (<code>paru</code>, <code>yay</code>, …)</td><td>For AUR installs</td><td>gopac hands AUR builds to your helper</td></tr>
+            <tr><td><code>pacman-contrib</code></td><td>Recommended</td><td>Provides <code>checkupdates</code>, so the UPDATES tab sees fresh data without root. Without it, gopac falls back to <code>pacman -Qu</code>, which only knows about your last <code>pacman -Sy</code></td></tr>
+            <tr><td>A <a href="https://www.nerdfonts.com/">Nerd Font</a></td><td>Recommended</td><td>Icons in the search bar and queue markers</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="usage">
+        <h2>Usage</h2>
+        <p>Run <code>gopac</code>. You start in the search bar with your installed packages listed below it. Type to search; results appear as you type.</p>
+
+        <h3>Tabs</h3>
+        <p>Switch tabs with <kbd>h</kbd> / <kbd>l</kbd> (or the arrow keys, or a mouse click). Each tab shows how many packages it contains.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Tab</th><th>Shows</th></tr></thead>
+          <tbody>
+            <tr><td><strong>ALL</strong></td><td>Every result: search results, or all installed packages when the search is empty</td></tr>
+            <tr><td><strong>AUR</strong></td><td>Results from the AUR (or installed packages not in any repo)</td></tr>
+            <tr><td><strong>OFFICIAL</strong></td><td>Results from the official repositories</td></tr>
+            <tr><td><strong>INSTALLED</strong></td><td>Results that are already installed</td></tr>
+            <tr><td><strong>UPDATES</strong></td><td>Installed packages with a newer version available</td></tr>
+            <tr><td><strong>ORPHANS</strong></td><td>Packages installed as dependencies that nothing requires anymore</td></tr>
+          </tbody>
+        </table></div>
+        <p>Search results are ordered by exact name match first, then official packages before AUR ones, then AUR packages by votes.</p>
+
+        <h3>Common tasks</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>I want to…</th><th>Do this</th></tr></thead>
+          <tbody>
+            <tr><td>Install a package</td><td>Search, select it, press <kbd>enter</kbd>, confirm with <kbd>y</kbd></td></tr>
+            <tr><td>Install several at once</td><td>Press <kbd>space</kbd> on each, then <kbd>I</kbd> to review and apply</td></tr>
+            <tr><td>Remove a package</td><td>Select an installed package, press <kbd>enter</kbd></td></tr>
+            <tr><td>Check an AUR package first</td><td>Select it and press <kbd>p</kbd> to read its PKGBUILD</td></tr>
+            <tr><td>Upgrade everything</td><td>Press <kbd>U</kbd> (or <kbd>enter</kbd> in the UPDATES tab)</td></tr>
+            <tr><td>Clean up orphans</td><td>Open ORPHANS, press <kbd>a</kbd> to queue all, then <kbd>I</kbd></td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="keybindings">
+        <h2>Keybindings</h2>
+        <p>Press <kbd>?</kbd> at any time for the in-app help. The mouse works too: click a tab, a panel or a package, and scroll whichever panel is under the pointer.</p>
+        <div class="keys">
+          <div>
+            <h3>General</h3>
+            <div class="table-wrap"><table><tbody>
+              <tr><td><kbd>/</kbd></td><td>Focus the search bar</td></tr>
+              <tr><td><kbd>tab</kbd> / <kbd>shift+tab</kbd></td><td>Cycle focus: search → list → details</td></tr>
+              <tr><td><kbd>U</kbd></td><td>Upgrade the whole system</td></tr>
+              <tr><td><kbd>r</kbd></td><td>Refresh installed packages, updates and the current search</td></tr>
+              <tr><td><kbd>?</kbd></td><td>Toggle help</td></tr>
+              <tr><td><kbd>ctrl+c</kbd></td><td>Quit</td></tr>
+            </tbody></table></div>
+          </div>
+          <div>
+            <h3>Search bar</h3>
+            <div class="table-wrap"><table><tbody>
+              <tr><td><kbd>enter</kbd></td><td>Search now and jump to the list</td></tr>
+              <tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Browse search history</td></tr>
+              <tr><td><kbd>esc</kbd></td><td>Leave the search bar</td></tr>
+            </tbody></table></div>
+          </div>
+          <div>
+            <h3>Package list</h3>
+            <div class="table-wrap"><table><tbody>
+              <tr><td><kbd>j</kbd> / <kbd>k</kbd>, <kbd>↑</kbd> / <kbd>↓</kbd></td><td>Move the selection</td></tr>
+              <tr><td><kbd>h</kbd> / <kbd>l</kbd>, <kbd>←</kbd> / <kbd>→</kbd></td><td>Switch tab</td></tr>
+              <tr><td><kbd>enter</kbd></td><td>Install or remove the selected package (upgrade all in UPDATES)</td></tr>
+              <tr><td><kbd>space</kbd></td><td>Queue / unqueue the selected package</td></tr>
+              <tr><td><kbd>a</kbd></td><td>Queue / unqueue every visible package</td></tr>
+              <tr><td><kbd>I</kbd></td><td>Review and apply the queue</td></tr>
+              <tr><td><kbd>C</kbd></td><td>Clear the queue</td></tr>
+              <tr><td><kbd>p</kbd></td><td>Toggle the PKGBUILD view (AUR packages)</td></tr>
+            </tbody></table></div>
+          </div>
+          <div>
+            <h3>Details pane</h3>
+            <div class="table-wrap"><table><tbody>
+              <tr><td><kbd>j</kbd> / <kbd>k</kbd>, <kbd>↑</kbd> / <kbd>↓</kbd></td><td>Scroll one line</td></tr>
+              <tr><td><kbd>ctrl+d</kbd> / <kbd>ctrl+u</kbd></td><td>Scroll ten lines</td></tr>
+              <tr><td><kbd>esc</kbd></td><td>Back to the list</td></tr>
+            </tbody></table></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="configuration">
+        <h2>Configuration</h2>
+        <p>gopac reads <code>~/.config/gopac/config.yaml</code> (or <code>$XDG_CONFIG_HOME/gopac/config.yaml</code>). Every setting is optional.</p>
+<pre><code><span class="c"># AUR helper to use for AUR installs and system upgrades.
+# Leave unset to auto-detect.</span>
+<span class="k">aur_helper</span>: <span class="s">paru</span>
+
+<span class="c"># UI theme: gruvbox (default), onedark, dracula, nord, catppuccin</span>
+<span class="k">theme</span>: <span class="s">gruvbox</span></code></pre>
+        <p>If the file can't be parsed, gopac prints a warning and starts with defaults.</p>
+
+        <h3>Command-line flags</h3>
+<pre><code>Usage: gopac [flags]
+
+  -H, --helper     AUR helper to use (e.g. paru, yay)
+  -t, --theme      UI theme (gruvbox, onedark, dracula, nord, catppuccin)
+  -v, --version    Show version information</code></pre>
+<pre><code>gopac -t dracula       <span class="c"># try a theme without editing the config</span>
+gopac --helper yay     <span class="c"># use yay for this session</span></code></pre>
+
+        <h3>Choosing the AUR helper</h3>
+        <p>gopac picks the first match from:</p>
+        <ol class="steps">
+          <li>the <code>--helper</code> flag</li>
+          <li><code>aur_helper</code> in the config file</li>
+          <li>the <code>AUR_HELPER</code> environment variable (if that program is on your <code>$PATH</code>)</li>
+          <li>the first installed of <code>paru</code>, <code>yay</code>, <code>pikaur</code>, <code>aura</code>, <code>trizen</code></li>
+        </ol>
+        <p>Without a helper, gopac still searches the AUR and manages official packages, but refuses AUR installs and tells you why.</p>
+
+        <h3>Themes</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Theme</th><th>Value</th><th>Style</th><th title="Base · official · AUR · focus">Palette</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Gruvbox</strong> (default)</td><td><code>gruvbox</code></td><td>Retro, warm and cozy</td><td><span class="swatches"><span style="background:#282828"></span><span style="background:#98971a"></span><span style="background:#d65d0e"></span><span style="background:#d79921"></span></span></td></tr>
+            <tr><td><strong>OneDark</strong></td><td><code>onedark</code></td><td>Balanced Atom-style dark</td><td><span class="swatches"><span style="background:#282c34"></span><span style="background:#61afef"></span><span style="background:#c678dd"></span><span style="background:#98c379"></span></span></td></tr>
+            <tr><td><strong>Dracula</strong></td><td><code>dracula</code></td><td>High-contrast purple and pink</td><td><span class="swatches"><span style="background:#282a36"></span><span style="background:#bd93f9"></span><span style="background:#ff79c6"></span><span style="background:#50fa7b"></span></span></td></tr>
+            <tr><td><strong>Nord</strong></td><td><code>nord</code></td><td>Cool arctic blues</td><td><span class="swatches"><span style="background:#2e3440"></span><span style="background:#81a1c1"></span><span style="background:#d08770"></span><span style="background:#88c0d0"></span></span></td></tr>
+            <tr><td><strong>Catppuccin</strong></td><td><code>catppuccin</code></td><td>Soft mocha pastels</td><td><span class="swatches"><span style="background:#1e1e2e"></span><span style="background:#89b4fa"></span><span style="background:#cba6f7"></span><span style="background:#f5c2e7"></span></span></td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Shell completions</h3>
+        <p>Fish completions ship with the AUR packages. For a source install:</p>
+<pre><code>install -Dm644 completions/gopac.fish ~/.config/fish/completions/gopac.fish</code></pre>
+      </section>
+
+      <section id="safety">
+        <h2>How gopac changes your system</h2>
+        <p>gopac never edits package state itself. Every change runs a command you could type yourself, in your terminal, with its normal prompts:</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Action</th><th>Command</th></tr></thead>
+          <tbody>
+            <tr><td>Install official packages</td><td><code>sudo pacman -S -- &lt;pkgs&gt;</code></td></tr>
+            <tr><td>Install AUR packages</td><td><code>&lt;helper&gt; -S -- &lt;pkgs&gt;</code></td></tr>
+            <tr><td>Remove packages</td><td><code>sudo pacman -Rns -- &lt;pkgs&gt;</code></td></tr>
+            <tr><td>Upgrade the system</td><td><code>&lt;helper&gt; -Syu</code> or <code>sudo pacman -Syu</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>If a command fails, gopac keeps its output on screen until you press Enter, and keeps your queue so you can retry.</p>
+        <div class="callout"><p>Updates are only offered as a full system upgrade, because <a href="https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported">partial upgrades are unsupported</a> on Arch.</p></div>
+        <div class="callout warn"><p><strong>AUR packages are user-submitted.</strong> gopac shows a warning before installing them; read the PKGBUILD (<kbd>p</kbd>) first.</p></div>
+
+        <h3>Files</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Path</th><th>Contents</th></tr></thead>
+          <tbody>
+            <tr><td><code>~/.config/gopac/config.yaml</code></td><td>Your configuration</td></tr>
+            <tr><td><code>~/.cache/gopac/history</code></td><td>The last 100 searches</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="development">
+        <h2>Development</h2>
+<pre><code>make build    <span class="c"># build ./gopac with the version from the latest git tag</span>
+make test     <span class="c"># go test ./...</span></code></pre>
+        <p>Pushing a <code>v*</code> tag runs the release workflow, which publishes the GitHub release and updates both AUR packages.</p>
+        <p>Bug reports and pull requests are welcome at <a href="https://github.com/the-daonm/gopac/issues">github.com/the-daonm/gopac</a>.</p>
+      </section>
+    </main>
+  </div>
+
+  <footer>
+    gopac is released under the <a href="https://github.com/the-daonm/gopac/blob/main/LICENCE">MIT licence</a> ·
+    <a href="https://github.com/the-daonm/gopac">Source on GitHub</a>
+  </footer>
+
+  <script>
+    // Theme toggle (remembers choice per browser).
+    (function () {
+      var root = document.documentElement;
+      try {
+        var saved = localStorage.getItem("gopac-theme");
+        if (saved === "light" || saved === "dark") root.setAttribute("data-theme", saved);
+      } catch (e) {}
+      document.getElementById("theme-toggle").addEventListener("click", function () {
+        var current = root.getAttribute("data-theme") ||
+          (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        var next = current === "dark" ? "light" : "dark";
+        root.setAttribute("data-theme", next);
+        try { localStorage.setItem("gopac-theme", next); } catch (e) {}
+      });
+    })();
+
+    // Copy buttons on code blocks.
+    document.querySelectorAll("main pre").forEach(function (pre) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "copy";
+      btn.textContent = "Copy";
+      pre.appendChild(btn);
+    });
+    document.addEventListener("click", function (e) {
+      var btn = e.target.closest(".copy");
+      if (!btn) return;
+      var text = btn.dataset.copy;
+      if (!text) {
+        var code = btn.parentElement.querySelector("code");
+        // Strip trailing "# comment" annotations so pasted commands run cleanly.
+        text = code.innerText.split("\n").map(function (l) {
+          return /^\s*#/.test(l) ? l : l.replace(/\s+#\s.*$/, "");
+        }).join("\n").trim();
+      }
+      navigator.clipboard.writeText(text).then(function () {
+        btn.textContent = "Copied";
+        setTimeout(function () { btn.textContent = "Copy"; }, 1400);
+      });
+    });
+
+    // Highlight the current section in the sidebar.
+    var links = {};
+    document.querySelectorAll("nav.toc a").forEach(function (a) { links[a.getAttribute("href").slice(1)] = a; });
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        Object.values(links).forEach(function (a) { a.classList.remove("active"); });
+        var a = links[entry.target.id];
+        if (a) a.classList.add("active");
+      });
+    }, { rootMargin: "-80px 0px -70% 0px" });
+    document.querySelectorAll("main section[id]").forEach(function (s) { observer.observe(s); });
+  </script>
+</body>
+</html>
